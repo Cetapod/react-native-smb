@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Cetapod SMB",
+    "owner": "Cetapod",
+    "slug": "cetapod-smb",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F0F8FF"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cetapod.smb"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4A90E2"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "developmentClient": {
+      "silentLaunch": true
+    },
+    "plugins": ["expo-document-picker", "expo-asset", "expo-sharing"]
+  }
+}

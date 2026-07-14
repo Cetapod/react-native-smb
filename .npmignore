@@ -1,0 +1,40 @@
+# Development files
+example/
+.goose/
+libsmb2/.git
+libsmb2/build/
+
+# Documentation (keeping only README.md)
+*.md
+!README.md
+
+# Development dependencies
+node_modules/
+.vscode/
+.idea/
+
+# Git files
+.git/
+.gitignore
+.gitmodules
+
+# Build artifacts that should regenerate
+.DS_Store
+*.log
+npm-debug.log*
+
+# Test files
+*.test.js
+*.test.ts
+__tests__/
+coverage/
+
+# CI/CD files
+.github/
+.travis.yml
+.circleci/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

@@ -1,0 +1,110 @@
+name: Publish Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v0.1.0 or v0.1.0-beta.1). Leave empty for latest release.'
+        required: false
+        type: string
+
+concurrency:
+  group: publish-package
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Resolve release tag and npm dist-tag
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          # 'true' / 'false' string from the release event; empty on workflow_dispatch.
+          RELEASE_PRERELEASE: ${{ github.event_name == 'release' && github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="$RELEASE_TAG"
+          elif [ -n "${INPUT_TAG:-}" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)"
+          fi
+          case "$TAG" in
+            v*) VERSION="${TAG#v}" ;;
+            *)
+              echo "Release tag must look like vX.Y.Z or vX.Y.Z-beta.N (got: $TAG)"
+              exit 1
+              ;;
+          esac
+
+          # npm dist-tags (channels):
+          #   latest  — default install (stable)
+          #   beta / rc / next / alpha — from semver prerelease id, or GitHub prerelease → next
+          # Consumers: npm i @cetapod/react-native-smb@beta
+          if [[ "$VERSION" == *-* ]]; then
+            # 0.2.0-beta.1 → beta; 1.0.0-rc.2 → rc; 2.0.0-next.3 → next
+            PRE_ID="${VERSION#*-}"
+            DIST_TAG="${PRE_ID%%.*}"
+            if [ -z "$DIST_TAG" ]; then
+              echo "Could not parse prerelease id from version: $VERSION"
+              exit 1
+            fi
+          elif [ "${RELEASE_PRERELEASE}" = "true" ]; then
+            # GitHub "pre-release" checked but version is plain X.Y.Z → channel "next"
+            DIST_TAG="next"
+          else
+            DIST_TAG="latest"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing tag $TAG (version $VERSION) → npm dist-tag '$DIST_TAG'"
+
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+          submodules: recursive
+
+      - name: Validate libsmb2 submodule
+        run: test -f libsmb2/CMakeLists.txt || { echo "libsmb2 submodule not initialized"; exit 1; }
+
+      - name: Assert package.json version matches tag
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          EXPECTED="${{ steps.meta.outputs.version }}"
+          if [ "$PKG_VERSION" != "$EXPECTED" ]; then
+            echo "package.json version ($PKG_VERSION) != tag version ($EXPECTED)"
+            exit 1
+          fi
+          echo "name=$(node -p "require('./package.json').name")"
+          echo "version=$PKG_VERSION"
+          echo "dist-tag=${{ steps.meta.outputs.dist_tag }}"
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@cetapod'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish to npm
+        run: npm publish --access public --tag "${{ steps.meta.outputs.dist_tag }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || 'dummy-npm-token' }}

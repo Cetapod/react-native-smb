@@ -1,0 +1,63 @@
+{
+  "name": "@cetapod/react-native-smb",
+  "version": "1.0.0",
+  "description": "A React Native Nitro module exposing libsmb2 C++ library for SMB client functionality",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:libsmb2": "chmod +x scripts/build-libsmb2.sh && scripts/build-libsmb2.sh",
+    "build:xcframework": "chmod +x scripts/create-xcframework.sh && scripts/create-xcframework.sh",
+    "build:ios": "npm run build:libsmb2 && npm run build:xcframework",
+    "build:full": "npm run build && npm run build:ios",
+    "prepare": "npm run build",
+    "prepack": "npm run build:full",
+    "postpack": "npm run clean:build",
+    "clean": "rm -rf lib",
+    "clean:build": "rm -rf ios/ && cd libsmb2 && rm -rf build/",
+    "setup:example": "npm run build:full && cd example && npm install",
+    "example": "npm run setup:example && cd example && npm run ios",
+    "example:prebuild": "npm run setup:example && cd example && npm run prebuild:ios"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cetapod/react-native-smb.git"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "nitro",
+    "native-module",
+    "smb",
+    "libsmb2",
+    "react-native-smb",
+    "@cetapod/react-native-smb"
+  ],
+  "author": "Cetapod open source <open-source@cetapod.com>",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0",
+    "react-native": ">=0.76.0",
+    "react-native-nitro-modules": ">=0.22.0 <1.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.1",
+    "react-native": "0.83.4",
+    "react-native-nitro-modules": "~0.31.9",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "lib/",
+    "cpp/",
+    "ios/",
+    "android/",
+    "scripts/",
+    "docs/",
+    "ReactNativeSmb.podspec",
+    "README.md",
+    "LICENSE"
+  ]
+}

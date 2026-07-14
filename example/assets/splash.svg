@@ -1,0 +1,57 @@
+<svg width="1284" height="2778" viewBox="0 0 1284 2778" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="backgroundGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F0F8FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E6F3FF;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="iconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2E5C8A;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1284" height="2778" fill="url(#backgroundGrad)"/>
+  
+  <!-- Main icon centered -->
+  <g transform="translate(642, 1389)">
+    <!-- Background circle -->
+    <circle cx="0" cy="0" r="200" fill="url(#iconGrad)" stroke="#1E3A5F" stroke-width="6"/>
+    
+    <!-- Server racks -->
+    <rect x="-120" y="-80" width="240" height="50" rx="8" fill="#FFFFFF" stroke="#E0E8F0" stroke-width="2"/>
+    <rect x="-120" y="-20" width="240" height="50" rx="8" fill="#F8FCFF" stroke="#E0E8F0" stroke-width="2"/>
+    <rect x="-120" y="40" width="240" height="50" rx="8" fill="#FFFFFF" stroke="#E0E8F0" stroke-width="2"/>
+    
+    <!-- Status lights -->
+    <circle cx="-90" cy="-55" r="6" fill="#2ECC71"/>
+    <circle cx="-70" cy="-55" r="6" fill="#4A90E2"/>
+    <circle cx="-50" cy="-55" r="6" fill="#E74C3C"/>
+    
+    <circle cx="-90" cy="5" r="6" fill="#2ECC71"/>
+    <circle cx="-70" cy="5" r="6" fill="#4A90E2"/>
+    <circle cx="-50" cy="5" r="6" fill="#F39C12"/>
+    
+    <circle cx="-90" cy="65" r="6" fill="#2ECC71"/>
+    <circle cx="-70" cy="65" r="6" fill="#4A90E2"/>
+    <circle cx="-50" cy="65" r="6" fill="#9B59B6"/>
+    
+    <!-- SMB share symbol -->
+    <g transform="translate(50, -100)">
+      <circle cx="0" cy="0" r="35" fill="#FFFFFF" opacity="0.95"/>
+      <rect x="-20" y="-15" width="40" height="30" fill="#4A90E2" rx="3"/>
+      <path d="M-15 -8 L-5 -8 M-15 0 L10 0 M-15 8 L15 8" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="12" cy="-18" r="4" fill="#2ECC71"/>
+    </g>
+  </g>
+  
+  <!-- App name -->
+  <text x="642" y="1750" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="300" fill="#1E3A5F">
+    SMB Example
+  </text>
+  
+  <!-- Subtle subtitle -->
+  <text x="642" y="1810" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="200" fill="#4A6B8A">
+    Network File Browser
+  </text>
+</svg>

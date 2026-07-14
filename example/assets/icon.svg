@@ -1,0 +1,38 @@
+
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2E5C8A;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="512" cy="512" r="480" fill="url(#grad)" stroke="#1E3A5F" stroke-width="8"/>
+  
+  <!-- Server/Network icon -->
+  <rect x="256" y="320" width="512" height="120" rx="20" fill="#FFFFFF" stroke="#E0E8F0" stroke-width="4"/>
+  <rect x="256" y="460" width="512" height="120" rx="20" fill="#F0F8FF" stroke="#E0E8F0" stroke-width="4"/>
+  <rect x="256" y="600" width="512" height="120" rx="20" fill="#FFFFFF" stroke="#E0E8F0" stroke-width="4"/>
+  
+  <!-- Server dots/lights -->
+  <circle cx="300" cy="380" r="12" fill="#4A90E2"/>
+  <circle cx="340" cy="380" r="12" fill="#2ECC71"/>
+  <circle cx="380" cy="380" r="12" fill="#E74C3C"/>
+  
+  <circle cx="300" cy="520" r="12" fill="#4A90E2"/>
+  <circle cx="340" cy="520" r="12" fill="#2ECC71"/>
+  <circle cx="380" cy="520" r="12" fill="#F39C12"/>
+  
+  <circle cx="300" cy="660" r="12" fill="#4A90E2"/>
+  <circle cx="340" cy="660" r="12" fill="#2ECC71"/>
+  <circle cx="380" cy="660" r="12" fill="#9B59B6"/>
+  
+  <!-- SMB/Share icon in corner -->
+  <g transform="translate(600, 200)">
+    <circle cx="60" cy="60" r="80" fill="#FFFFFF" opacity="0.9"/>
+    <path d="M30 40 L90 40 L90 80 L30 80 Z" fill="#4A90E2"/>
+    <path d="M40 50 L50 50 M40 60 L70 60 M40 70 L80 70" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="75" cy="35" r="8" fill="#2ECC71"/>
+  </g>
+</svg>

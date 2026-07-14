@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-library:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate environment
+        run: |
+          echo "Node: $(node --version), npm: $(npm --version)"
+          echo "Xcode: $(xcode-select --version)"
+          cmake --version | head -1
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Validate libsmb2 submodule
+        run: test -f libsmb2/CMakeLists.txt || { echo "libsmb2 submodule not initialized"; exit 1; }
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Build iOS native (libsmb2 + XCFramework)
+        run: npm run build:ios
+
+      - name: Show library packages
+        run: |
+          echo "Listing lib directory:" && ls -R lib || true
+          echo "Listing ios directory:" && ls -1 ios || true
+
+      - name: Upload library build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: library-build
+          path: |
+            lib/
+            ios/
+          retention-days: 1
+
+  build-example:
+    needs: build-library
+    runs-on: macos-latest
+    # ~8m warm runs; headroom for cold npm / derived-data misses.
+    timeout-minutes: 15
+    steps:
+      # No submodules: native libsmb2 bits come from the library-build artifact.
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download library build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: library-build
+          path: .
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          cache: npm
+          # Hash the example lockfile; this job installs example/ deps, not root.
+          cache-dependency-path: example/package-lock.json
+
+      - name: Pack library for example app
+        run: |
+          test -f lib/index.js || { echo "missing lib/ from library-build artifact"; exit 1; }
+          test -d ios || { echo "missing ios/ from library-build artifact"; exit 1; }
+          npm pack --ignore-scripts
+          ls -1 cetapod-react-native-smb-*.tgz
+
+      - name: Install example dependencies and prebuild iOS
+        run: |
+          PACKFILE=$(ls -1 cetapod-react-native-smb-*.tgz | head -1)
+          cd example
+          npm pkg set "dependencies.@cetapod/react-native-smb=file:../${PACKFILE}"
+          npm install
+          npm run prebuild:ios
+
+      # Compile only (no simulator boot / install). Scheme name comes from expo prebuild.
+      - name: Build example iOS app
+        working-directory: example/ios
+        run: |
+          xcodebuild \
+            -workspace CetapodSMB.xcworkspace \
+            -scheme CetapodSMB \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
