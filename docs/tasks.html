@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    .doc-search:not(.doc-search--open),[data-doc-search]:not(.doc-search--open){display:none!important;visibility:hidden!important;pointer-events:none!important}
+    .nav__icon-btn svg,.nav__theme svg{width:18px;height:18px;max-width:none}
+    .doc-search__icon{width:20px;height:20px;max-width:none}
+  </style>
+  <script>try{var t=localStorage.getItem("docs-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task model — @cetapod/react-native-smb</title>
+  <link rel="icon" type="image/svg+xml" href="/react-native-smb/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-QZboNQF6.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-n7CQRKqD.js"></script>
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BoOIqQ8d.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+</head>
+<body class="docs-body" data-docs-page="tasks">
+
+  <nav class="nav" data-site-nav></nav>
+
+
+  <div class="docs-overlay" data-docs-overlay></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav class="docs-nav" data-docs-nav></nav>
+    </aside>
+
+    <div class="docs-body-wrap">
+      <div class="docs-main">
+
+      <article class="docs-content">
+        <h1>Task model</h1>
+        <p class="docs-lead">
+          Every SMB operation returns <code>SmbTask&lt;T&gt;</code>. Creating the task starts native work
+          immediately — you choose when to subscribe, await, or cancel.
+        </p>
+
+        <h2 id="overview">Overview</h2>
+        <p>Three optional actions on any task:</p>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Action</th><th>When</th><th>API</th></tr></thead>
+            <tbody>
+              <tr><td>Get result</td><td>You need the return value</td><td><code>await task.result()</code></td></tr>
+              <tr><td>Watch progress</td><td>UI needs live updates</td><td><code>task.subscribe()</code> or <code>useSubscribe</code></td></tr>
+              <tr><td>Cancel</td><td>User aborts</td><td><code>task.cancel()</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="result">Get the result</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">basic.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">await</span> smb.<span class="fn">connect</span>(<span class="str">'smb://192.168.1.100/Share'</span>, creds).<span class="fn">result</span>();
+
+<span class="kw">const</span> files = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/'</span>, <span class="kw">false</span>, <span class="num">-1</span>).<span class="fn">result</span>();
+<span class="kw">await</span> smb.<span class="fn">downloadFile</span>(<span class="str">'/doc.pdf'</span>, <span class="str">'/local/doc.pdf'</span>).<span class="fn">result</span>();</pre>
+        </div>
+        <p>Hold the handle and await later:</p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">deferred.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">const</span> task = smb.<span class="fn">copyItem</span>(<span class="str">'/src'</span>, <span class="str">'/dst'</span>, <span class="kw">true</span>);
+<span class="kw">await</span> task.<span class="fn">result</span>();</pre>
+        </div>
+        <p>Batch multiple tasks — like <code>Promise.allSettled</code>:</p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">batch.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">import</span> { <span class="type">SmbTask</span> } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">const</span> tasks = files.<span class="fn">map</span>((f) => smb.<span class="fn">deleteItem</span>(f.path));
+<span class="kw">const</span> results = <span class="kw">await</span> <span class="type">SmbTask</span>.<span class="fn">settleAll</span>(tasks);</pre>
+        </div>
+
+        <h2 id="subscribe">Watch progress</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">subscribe.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">const</span> task = smb.<span class="fn">downloadFile</span>(remote, local);
+
+<span class="cmt">// Live getters on the task object</span>
+<span class="kw">const</span> unsub = task.<span class="fn">subscribe</span>();
+
+<span class="cmt">// Or with a callback</span>
+<span class="kw">const</span> unsub2 = task.<span class="fn">subscribe</span>((snap) => {
+  console.<span class="fn">log</span>(snap.progress, snap.bytesPerSecond, snap.status);
+});
+
+<span class="cmt">// Read getters after subscribing</span>
+console.<span class="fn">log</span>(task.progress, task.status);</pre>
+        </div>
+
+        <p>React — <code>useSubscribe</code> subscribes automatically on mount (and whenever <code>task</code> changes), and unsubscribes on unmount:</p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">DownloadBar.tsx</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">import</span> { useSubscribe, statusLabel } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">function</span> <span class="fn">DownloadBar</span>({ task }) {
+  <span class="kw">const</span> { progress, status, cancel } = <span class="fn">useSubscribe</span>(task);
+
+  <span class="kw">return</span> (
+    &lt;&gt;
+      &lt;Text&gt;{Math.<span class="fn">round</span>(progress * <span class="num">100</span>)}%&lt;/Text&gt;
+      &lt;Text&gt;{<span class="fn">statusLabel</span>(status)}&lt;/Text&gt;
+      &lt;Button onPress={cancel} title=<span class="str">"Cancel"</span> /&gt;
+    &lt;/&gt;
+  );
+}</pre>
+        </div>
+        <p>
+          The hook also returns <code>subscribe</code>, in case you want to attach an extra listener
+          callback (e.g. for logging) on top of the automatic subscription:
+        </p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">logging.tsx</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">const</span> { subscribe } = <span class="fn">useSubscribe</span>(task);
+useEffect(() => <span class="fn">subscribe</span>((snap) => console.<span class="fn">log</span>(snap)), [subscribe]);</pre>
+        </div>
+
+        <div class="callout callout--warn">
+          <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          <div>
+            <strong>Don't destructure progress at creation time.</strong>
+            <code>task.progress</code> and <code>task.status</code> are live getters on the imperative API — read
+            them after calling <code>task.subscribe()</code>. <code>useSubscribe</code> subscribes for you
+            automatically, so its <code>progress</code>/<code>status</code> are always live.
+          </div>
+        </div>
+
+        <h3 id="snapshot-fields">Snapshot fields</h3>
+        <p><code>subscribe()</code> and <code>get()</code> return <code>SmbTaskState</code>:</p>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Field</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>progress</code></td><td><code>0–1</code> (determinate for transfers)</td></tr>
+              <tr><td><code>status</code></td><td><code>TaskStatus</code> enum</td></tr>
+              <tr><td><code>bytesDone</code> / <code>totalBytes</code></td><td>Raw byte counts</td></tr>
+              <tr><td><code>bytesPerSecond</code> / <code>etaSeconds</code></td><td>Throughput estimate</td></tr>
+              <tr><td><code>determinate</code></td><td><code>true</code> for download/upload/copy</td></tr>
+              <tr><td><code>sourcePath</code> / <code>destinationPath</code></td><td>Paths for transfer ops</td></tr>
+              <tr><td><code>errorCode</code> / <code>errorMessage</code></td><td>Set on failure</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="cancel">Cancel</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">cancel.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">const</span> task = smb.<span class="fn">downloadFile</span>(remote, local);
+task.<span class="fn">subscribe</span>();
+
+<span class="cmt">// User taps cancel</span>
+task.<span class="fn">cancel</span>();
+unsub();</pre>
+        </div>
+        <p>Cancelled tasks reject with <code>SmbTaskError</code> where <code>code === SmbError.Cancelled</code>.</p>
+
+        <h2 id="fire-and-forget">Fire-and-forget</h2>
+        <p>Start work without awaiting — useful for bulk ops with a transfer tray:</p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">bulk.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre>files.<span class="fn">forEach</span>((f) => smb.<span class="fn">downloadFile</span>(f.remote, f.local));
+
+<span class="cmt">// Reload when all settle</span>
+<span class="kw">const</span> tasks = files.<span class="fn">map</span>((f) => smb.<span class="fn">deleteItem</span>(f.path));
+<span class="kw">void</span> <span class="type">SmbTask</span>.<span class="fn">settleAll</span>(tasks).<span class="fn">then</span>(() => <span class="fn">reload</span>());</pre>
+        </div>
+
+        <h2 id="transfer-tray">Transfer tray</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">TransferTray.tsx</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">import</span> { useTransfers, useTransferActions } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">function</span> <span class="fn">TransferTray</span>({ smb }) {
+  <span class="kw">const</span> tasks = <span class="fn">useTransfers</span>(smb);
+  <span class="kw">const</span> { clearCompleted, hide } = <span class="fn">useTransferActions</span>(smb);
+
+  <span class="cmt">// tasks is SmbTaskState[] — all active transfers</span>
+}</pre>
+        </div>
+        <p>See the example app's <code>TransferTrayPanel</code> for a complete implementation.</p>
+
+        <h2 id="errors">Error handling</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">errors.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">import</span> { SmbError, SmbTaskError } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">try</span> {
+  <span class="kw">await</span> smb.<span class="fn">getPathInfo</span>(<span class="str">'/nonexistent'</span>).<span class="fn">result</span>();
+} <span class="kw">catch</span> (error) {
+  <span class="kw">if</span> (error <span class="kw">instanceof</span> SmbTaskError) {
+    <span class="kw">if</span> (error.code === SmbError.NotFound) { <span class="cmt">/* ... */</span> }
+    <span class="kw">if</span> (error.code === SmbError.AccessDenied) { <span class="cmt">/* ... */</span> }
+  }
+}</pre>
+        </div>
+        <p>See <a href="/react-native-smb/docs/types.html#smb-error">SmbError</a> for all error codes.</p>
+
+        <h2 id="lifecycle">Lifecycle</h2>
+        <p>When the user logs out or you're done with a client, call <code>dispose()</code>:</p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">lifecycle.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre>smb.<span class="fn">dispose</span>(); <span class="cmt">// stops transfer store listener</span></pre>
+        </div>
+        <p>Sync state checks (<code>isConnected</code>, <code>isInitialized</code>) are available anytime without a task.</p>
+
+        <nav class="docs-pager">
+          <a href="/react-native-smb/docs/" class="docs-pager__link">
+            <div class="docs-pager__label">Previous</div>
+            <div class="docs-pager__title">Getting started</div>
+          </a>
+          <a href="/react-native-smb/docs/api.html" class="docs-pager__link docs-pager__link--next">
+            <div class="docs-pager__label">Next</div>
+            <div class="docs-pager__title">API reference</div>
+          </a>
+        </nav>
+      </article>
+    </div>
+      <aside class="docs-rail" data-docs-toc-right aria-label="Page contents"></aside>
+    </div>
+  </div>
+
+  <div data-site-footer></div>
+
+</body>
+</html>

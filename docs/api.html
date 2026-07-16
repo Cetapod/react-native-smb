@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    .doc-search:not(.doc-search--open),[data-doc-search]:not(.doc-search--open){display:none!important;visibility:hidden!important;pointer-events:none!important}
+    .nav__icon-btn svg,.nav__theme svg{width:18px;height:18px;max-width:none}
+    .doc-search__icon{width:20px;height:20px;max-width:none}
+  </style>
+  <script>try{var t=localStorage.getItem("docs-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API reference — @cetapod/react-native-smb</title>
+  <link rel="icon" type="image/svg+xml" href="/react-native-smb/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-QZboNQF6.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-n7CQRKqD.js"></script>
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BoOIqQ8d.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+</head>
+<body class="docs-body" data-docs-page="api">
+
+  <nav class="nav" data-site-nav></nav>
+
+
+  <div class="docs-overlay" data-docs-overlay></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav class="docs-nav" data-docs-nav></nav>
+    </aside>
+
+    <div class="docs-body-wrap">
+      <div class="docs-main">
+
+      <article class="docs-content">
+        <h1>API reference</h1>
+        <p class="docs-lead">
+          All async methods return <code>SmbTask&lt;T&gt;</code>. Await with <code>.result()</code>.
+          See <a href="/react-native-smb/docs/tasks.html">Task model</a> for subscribe and cancel patterns.
+        </p>
+
+        <div class="docs-no-results" data-no-results>
+          <p>No methods match your search.</p>
+        </div>
+
+        <h2 id="overview">Overview</h2>
+        <div class="method-card" data-searchable="SMB factory create client Smb">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">SMB()</div>
+              <div class="method-card__sig">SMB(): Smb</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">factory</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Create a new SMB client instance. Each instance has its own connection pool and transfer store.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">client.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">import</span> { SMB } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">const</span> smb = <span class="fn">SMB</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <h2 id="connection">Connection</h2>
+
+        <div class="method-card" data-searchable="initialize server url credentials no share">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">initialize</div>
+              <div class="method-card__sig">initialize(url, creds) → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--task">task</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Connect to server only — no share mounted. Use before <code>listShares()</code> or <code>connectShare()</code>.</p>
+            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead><tbody>
+              <tr><td><code>url</code></td><td class="col-type">string</td><td>Server URL without share path</td></tr>
+              <tr><td><code>creds</code></td><td class="col-type">SmbCredentials</td><td>Username and password</td></tr>
+            </tbody></table></div>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">init.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">initialize</span>(<span class="str">'smb://192.168.1.100'</span>, creds).<span class="fn">result</span>();
+<span class="kw">const</span> shares = <span class="kw">await</span> smb.<span class="fn">listShares</span>().<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="connect url credentials auth mount share SmbConnectionInfo">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">connect</div>
+              <div class="method-card__sig">connect(url, creds) → SmbTask&lt;SmbConnectionInfo&gt;</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--task">task</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Authenticate and mount the share from the URL in one step.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">connect.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> info = <span class="kw">await</span> smb
+  .<span class="fn">connect</span>(<span class="str">'smb://nas.local/Media'</span>, creds)
+  .<span class="fn">result</span>();
+
+console.<span class="fn">log</span>(info.server, info.share, info.isConnected);</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="connectShare switch share mount">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">connectShare</div>
+              <div class="method-card__sig">connectShare(share) → SmbTask&lt;SmbConnectionInfo&gt;</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--task">task</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Switch to a different share on an already-initialized server.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">share.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">initialize</span>(<span class="str">'smb://nas.local'</span>, creds).<span class="fn">result</span>();
+<span class="kw">const</span> info = <span class="kw">await</span> smb.<span class="fn">connectShare</span>(<span class="str">'Documents'</span>).<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="disconnect close session">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">disconnect</div>
+              <div class="method-card__sig">disconnect() → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--task">task</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Close the SMB session and release all pool slots.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">disconnect.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">disconnect</span>().<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="listShares enumerate shares SmbShareList">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">listShares</div>
+              <div class="method-card__sig">listShares() → SmbTask&lt;SmbShareList[]&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--interactive">interactive</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Enumerate available shares on the server. Requires prior <code>initialize()</code>.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">shares.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> shares = <span class="kw">await</span> smb.<span class="fn">listShares</span>().<span class="fn">result</span>();
+shares.<span class="fn">forEach</span>((s) => console.<span class="fn">log</span>(s.name, s.comment));</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="isConnected isInitialized sync boolean state">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">isConnected / isInitialized</div>
+              <div class="method-card__sig">isConnected(): boolean · isInitialized(): boolean</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">sync</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Synchronous state checks — no task required.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">state.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">if</span> (smb.<span class="fn">isConnected</span>()) {
+  <span class="cmt">// safe to browse files</span>
+}
+<span class="kw">if</span> (smb.<span class="fn">isInitialized</span>()) {
+  <span class="cmt">// server session exists, may not have share</span>
+}</pre>
+            </div>
+          </div>
+        </div>
+
+        <h2 id="filesystem">File system</h2>
+
+        <div class="method-card" data-searchable="listDirectory browse folder recursive maxDepth SmbFileInfo">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">listDirectory</div>
+              <div class="method-card__sig">listDirectory(path, recursive?, maxDepth?) → SmbTask&lt;SmbFileInfo[]&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--interactive">interactive*</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">List directory contents. <code>maxDepth: -1</code> for unlimited recursion. Shallow lists use interactive slot; recursive uses metadata slot.</p>
+            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+              <tr><td><code>path</code></td><td class="col-type">string</td><td>—</td><td>Directory path</td></tr>
+              <tr><td><code>recursive</code></td><td class="col-type">boolean</td><td>false</td><td>Include subdirectories</td></tr>
+              <tr><td><code>maxDepth</code></td><td class="col-type">number</td><td>-1</td><td>Max recursion depth (-1 = unlimited)</td></tr>
+            </tbody></table></div>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">list.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> entries = <span class="kw">await</span> smb
+  .<span class="fn">listDirectory</span>(<span class="str">'/Photos'</span>, <span class="kw">false</span>)
+  .<span class="fn">result</span>();
+
+<span class="kw">const</span> tree = <span class="kw">await</span> smb
+  .<span class="fn">listDirectory</span>(<span class="str">'/'</span>, <span class="kw">true</span>, <span class="num">3</span>)
+  .<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="getPathInfo file info metadata stat">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">getPathInfo</div>
+              <div class="method-card__sig">getPathInfo(path) → SmbTask&lt;SmbFileInfo&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--interactive">interactive</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Get metadata for a single file or directory.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">info.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> info = <span class="kw">await</span> smb.<span class="fn">getPathInfo</span>(<span class="str">'/document.pdf'</span>).<span class="fn">result</span>();
+console.<span class="fn">log</span>(info.size, info.modifiedAt);</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="downloadFile download transfer progress remote local">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">downloadFile</div>
+              <div class="method-card__sig">downloadFile(remotePath, localPath) → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--metadata">metadata</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Download a remote file to a local path. Use <code>.subscribe()</code> for progress.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">download.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> task = smb.<span class="fn">downloadFile</span>(
+  <span class="str">'/video.mp4'</span>,
+  <span class="str">`${FileSystem.documentDirectory}video.mp4`</span>,
+);
+task.<span class="fn">subscribe</span>((s) => console.<span class="fn">log</span>(s.progress, s.bytesPerSecond));
+<span class="kw">await</span> task.<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="uploadFile upload transfer local remote">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">uploadFile</div>
+              <div class="method-card__sig">uploadFile(localPath, remotePath) → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--metadata">metadata</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Upload a local file to a remote SMB path.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">upload.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> task = smb.<span class="fn">uploadFile</span>(
+  <span class="str">'/local/photo.jpg'</span>,
+  <span class="str">'/Photos/photo.jpg'</span>,
+);
+<span class="kw">await</span> task.<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="createDirectory mkdir folder parents">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">createDirectory</div>
+              <div class="method-card__sig">createDirectory(path) → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--interactive">interactive</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Create a directory. Creates parent directories as needed.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">mkdir.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">createDirectory</span>(<span class="str">'/Projects/2026/Q1'</span>).<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="deleteItem delete remove recursive directory">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">deleteItem</div>
+              <div class="method-card__sig">deleteItem(path) → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--metadata">metadata</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Delete a file or directory. Directories are removed recursively.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">delete.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">deleteItem</span>(<span class="str">'/old-backup'</span>).<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="renameItem rename basename newName">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">renameItem</div>
+              <div class="method-card__sig">renameItem(path, newName) → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--interactive">interactive</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Rename in place. <code>newName</code> is the basename only, not a full path.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">rename.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">renameItem</span>(<span class="str">'/draft.txt'</span>, <span class="str">'final.txt'</span>).<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="moveItem move from to path">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">moveItem</div>
+              <div class="method-card__sig">moveItem(from, to) → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--interactive">interactive</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Move a file or directory to a new path.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">move.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">moveItem</span>(<span class="str">'/inbox/file.pdf'</span>, <span class="str">'/archive/file.pdf'</span>).<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="copyItem copy recursive from to">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">copyItem</div>
+              <div class="method-card__sig">copyItem(from, to, recursive?) → SmbTask&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--metadata">metadata</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Copy a file or directory. Set <code>recursive: true</code> for directories.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">copy.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">copyItem</span>(<span class="str">'/templates'</span>, <span class="str">'/backup/templates'</span>, <span class="kw">true</span>).<span class="fn">result</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="duplicateItem duplicate copy name string path">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">duplicateItem</div>
+              <div class="method-card__sig">duplicateItem(path) → SmbTask&lt;string&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--metadata">metadata</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Duplicate a file or folder in place. Returns the new path.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">duplicate.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> newPath = <span class="kw">await</span> smb.<span class="fn">duplicateItem</span>(<span class="str">'/report.pdf'</span>).<span class="fn">result</span>();
+<span class="cmt">// "/report copy.pdf"</span></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="getSecurityDescriptor ACL permissions security ownerSid dacl">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">getSecurityDescriptor</div>
+              <div class="method-card__sig">getSecurityDescriptor(path) → SmbTask&lt;SmbSecurityDescriptor&gt;</div>
+            </div>
+            <div class="method-card__badges">
+              <span class="method-badge method-badge--task">task</span>
+              <span class="method-badge method-badge--interactive">interactive</span>
+            </div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Read Windows ACL / security descriptor for a path.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">acl.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> sd = <span class="kw">await</span> smb.<span class="fn">getSecurityDescriptor</span>(<span class="str">'/shared'</span>).<span class="fn">result</span>();
+sd.dacl.aces.<span class="fn">forEach</span>((ace) => console.<span class="fn">log</span>(ace.sid, ace.mask));</pre>
+            </div>
+          </div>
+        </div>
+
+        <h2 id="pool">Pool & lifecycle</h2>
+
+        <div class="method-card" data-searchable="getPoolInfo PoolInfo slots diagnostics">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">getPoolInfo</div>
+              <div class="method-card__sig">getPoolInfo() → PoolInfo</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">sync</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Snapshot of all connection pool slots. See <a href="/react-native-smb/docs/architecture.html">Architecture</a>.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">pool.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> info = smb.<span class="fn">getPoolInfo</span>();
+info.slots.<span class="fn">forEach</span>((s) => console.<span class="fn">log</span>(s.index, s.state, s.kind));</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="subscribePoolInfo unsubscribePoolInfo pool listener">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">subscribePoolInfo</div>
+              <div class="method-card__sig">subscribePoolInfo(cb) → string · unsubscribePoolInfo(id)</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">sync</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Subscribe to live pool state changes. Returns a listener ID for unsubscribe.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">pool-sub.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> id = smb.<span class="fn">subscribePoolInfo</span>((snap) => {
+  console.<span class="fn">log</span>(snap.slots);
+});
+smb.<span class="fn">unsubscribePoolInfo</span>(id);</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="resetPool dispose lifecycle teardown">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">resetPool / dispose</div>
+              <div class="method-card__sig">resetPool(): void · dispose(): void</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">sync</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc"><code>resetPool()</code> disconnects all slots. <code>dispose()</code> tears down the transfer store — call on logout.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">lifecycle.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre>smb.<span class="fn">resetPool</span>();
+smb.<span class="fn">dispose</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <h2 id="hooks">Hooks</h2>
+
+        <div class="method-card" data-searchable="useSubscribe React hook progress status cancel snapshot">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">useSubscribe</div>
+              <div class="method-card__sig">useSubscribe(task) → SubscribeHandle</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">hook</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">React binding for <code>SmbTask.subscribe()</code>. Subscribes automatically on mount and whenever <code>task</code> changes; unsubscribes on unmount / task change.</p>
+            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>Returns</th><th>Type</th><th>Description</th></tr></thead><tbody>
+              <tr><td><code>subscribe</code></td><td class="col-type">function</td><td>Attach an extra listener on top of the automatic subscription; returns unsubscribe</td></tr>
+              <tr><td><code>cancel</code></td><td class="col-type">function</td><td>Abort the task</td></tr>
+              <tr><td><code>progress</code></td><td class="col-type">number</td><td>Latest progress 0–1</td></tr>
+              <tr><td><code>status</code></td><td class="col-type">TaskStatus</td><td>Latest status</td></tr>
+              <tr><td><code>snapshot</code></td><td class="col-type">SmbTaskState | null</td><td>Full state object</td></tr>
+              <tr><td><code>task</code></td><td class="col-type">SmbTask | null</td><td>Original task ref</td></tr>
+            </tbody></table></div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="useTransfers useTransferActions transfer tray clearCompleted hide">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">useTransfers / useTransferActions</div>
+              <div class="method-card__sig">useTransfers(smb) → SmbTaskState[] · useTransferActions(smb)</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">hook</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Power a transfer tray UI — all active download/upload/copy tasks in one array.</p>
+            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>useTransferActions</th><th>Description</th></tr></thead><tbody>
+              <tr><td><code>clearCompleted()</code></td><td>Remove finished transfers from tray</td></tr>
+              <tr><td><code>hide(taskId)</code></td><td>Hide a specific transfer</td></tr>
+            </tbody></table></div>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">tray.tsx</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> transfers = <span class="fn">useTransfers</span>(smb);
+<span class="kw">const</span> { clearCompleted, hide } = <span class="fn">useTransferActions</span>(smb);</pre>
+            </div>
+          </div>
+        </div>
+
+        <h2 id="utilities">Utilities</h2>
+
+        <div class="method-card" data-searchable="normalizePath splitPath joinPath getParentPath getFileName path">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">Path helpers</div>
+              <div class="method-card__sig">normalizePath · splitPath · joinPath · getParentPath · getFileName</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">util</span></div>
+          </div>
+          <div class="method-card__body">
+            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>Function</th><th>Description</th></tr></thead><tbody>
+              <tr><td><code>normalizePath(path)</code></td><td>Forward slashes, trim trailing <code>/</code></td></tr>
+              <tr><td><code>splitPath(path)</code></td><td>Returns <code>PathComponents</code></td></tr>
+              <tr><td><code>joinPath(dir, name)</code></td><td>Combine directory and filename</td></tr>
+              <tr><td><code>getParentPath(path)</code></td><td>Parent directory</td></tr>
+              <tr><td><code>getFileName(path)</code></td><td>Filename from full path</td></tr>
+            </tbody></table></div>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">paths.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">import</span> { splitPath, joinPath, normalizePath } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">const</span> { parentDirectory, extension } = <span class="fn">splitPath</span>(<span class="str">'/docs/report.pdf'</span>);
+<span class="kw">const</span> path = <span class="fn">joinPath</span>(parentDirectory, <span class="str">'archive.pdf'</span>);</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="generateCopyName formatFileSize formatDate display">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">Display helpers</div>
+              <div class="method-card__sig">generateCopyName · formatFileSize · formatDate</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">util</span></div>
+          </div>
+          <div class="method-card__body">
+            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>Function</th><th>Description</th></tr></thead><tbody>
+              <tr><td><code>generateCopyName(base, ext, existing)</code></td><td><code>"file copy 2.pdf"</code> naming</td></tr>
+              <tr><td><code>formatFileSize(bytes)</code></td><td><code>"1.5 MB"</code> human-readable</td></tr>
+              <tr><td><code>formatDate(timestamp)</code></td><td>Locale date/time from Unix seconds</td></tr>
+            </tbody></table></div>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">display.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="fn">formatFileSize</span>(<span class="num">1536000</span>);  <span class="cmt">// "1.46 MB"</span>
+<span class="fn">formatDate</span>(file.modifiedAt);</pre>
+            </div>
+          </div>
+        </div>
+
+        <h2 id="labels">Label helpers</h2>
+
+        <div class="method-card" data-searchable="statusLabel operationLabel isTransferKind isDeterminateKind isTerminalStatus">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">Labels & predicates</div>
+              <div class="method-card__sig">statusLabel · operationLabel · isTransferKind · isDeterminateKind · isTerminalStatus</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">util</span></div>
+          </div>
+          <div class="method-card__body">
+            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>Function</th><th>Input</th><th>Returns</th></tr></thead><tbody>
+              <tr><td><code>statusLabel</code></td><td><code>TaskStatus</code></td><td><code>"running"</code>, <code>"success"</code>, etc.</td></tr>
+              <tr><td><code>operationLabel</code></td><td><code>SmbOperatorKind</code></td><td><code>"Download"</code>, <code>"List directory"</code>, etc.</td></tr>
+              <tr><td><code>isTransferKind</code></td><td><code>SmbOperatorKind</code></td><td>Download, upload, copy, duplicate</td></tr>
+              <tr><td><code>isDeterminateKind</code></td><td><code>SmbOperatorKind</code></td><td>Same as transfer kinds</td></tr>
+              <tr><td><code>isTerminalStatus</code></td><td><code>TaskStatus</code></td><td>Success, error, or cancelled</td></tr>
+            </tbody></table></div>
+          </div>
+        </div>
+
+        <nav class="docs-pager">
+          <a href="/react-native-smb/docs/tasks.html" class="docs-pager__link">
+            <div class="docs-pager__label">Previous</div>
+            <div class="docs-pager__title">Task model</div>
+          </a>
+          <a href="/react-native-smb/docs/types.html" class="docs-pager__link docs-pager__link--next">
+            <div class="docs-pager__label">Next</div>
+            <div class="docs-pager__title">Types & enums</div>
+          </a>
+        </nav>
+      </article>
+    </div>
+      <aside class="docs-rail" data-docs-toc-right aria-label="Page contents"></aside>
+    </div>
+  </div>
+
+  <div data-site-footer></div>
+
+</body>
+</html>

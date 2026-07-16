@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    .doc-search:not(.doc-search--open),[data-doc-search]:not(.doc-search--open){display:none!important;visibility:hidden!important;pointer-events:none!important}
+    .nav__icon-btn svg,.nav__theme svg{width:18px;height:18px;max-width:none}
+    .doc-search__icon{width:20px;height:20px;max-width:none}
+  </style>
+  <script>try{var t=localStorage.getItem("docs-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Getting started — @cetapod/react-native-smb</title>
+  <meta name="description" content="Install and quick start guide for @cetapod/react-native-smb" />
+  <link rel="icon" type="image/svg+xml" href="/react-native-smb/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-QZboNQF6.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-n7CQRKqD.js"></script>
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BoOIqQ8d.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+</head>
+<body class="docs-body" data-docs-page="start">
+
+  <nav class="nav" data-site-nav></nav>
+
+
+  <div class="docs-overlay" data-docs-overlay></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav class="docs-nav" data-docs-nav></nav>
+    </aside>
+
+    <div class="docs-body-wrap">
+      <div class="docs-main">
+
+      <article class="docs-content">
+        <h1>Getting started</h1>
+        <p class="docs-lead">
+          Connect your React Native app to SMB shares — NAS boxes, Windows file servers,
+          and network drives — with native performance via libsmb2 and Nitro Modules.
+        </p>
+
+        <h2 id="introduction">Introduction</h2>
+        <p>
+          <code>@cetapod/react-native-smb</code> exposes a full SMBv2/v3 client to React Native.
+          Every operation returns an <code>SmbTask&lt;T&gt;</code> — start work immediately,
+          await the result, subscribe to progress, or cancel at any time.
+        </p>
+        <p>Key capabilities:</p>
+        <ul>
+          <li>Connect, list shares, browse directories, upload/download files</li>
+          <li>Create, delete, move, rename, copy, duplicate items</li>
+          <li>Read Windows ACL / security descriptors</li>
+          <li>4-slot connection pool with interactive-priority scheduling</li>
+          <li>React hooks for task subscriptions and transfer trays</li>
+        </ul>
+
+        <div class="callout callout--info">
+          <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <div>
+            <strong>Task-first API.</strong> Creating a task starts native work immediately.
+            Nothing is subscribed until you call <code>.subscribe()</code> or <code>.result()</code>.
+            See the <a href="/react-native-smb/docs/tasks.html">Task model</a> guide for patterns.
+          </div>
+        </div>
+
+        <h2 id="install">Install</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">terminal</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre>npm install @cetapod/react-native-smb react-native-nitro-modules
+cd ios && pod install</pre>
+        </div>
+        <p>
+          <code>react-native-nitro-modules</code> is a required peer dependency.
+          The library ships prebuilt iOS binaries via CocoaPods.
+        </p>
+
+        <div class="callout callout--warn">
+          <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          <div>
+            <strong>Test on Wi‑Fi.</strong> Port 445 is often blocked on cellular networks.
+            Use a local network or VPN when developing.
+          </div>
+        </div>
+
+        <h2 id="quick-start">Quick start</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">App.tsx</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">import</span> { SMB, <span class="type">SmbCredentials</span> } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">const</span> smb = <span class="fn">SMB</span>();
+<span class="kw">const</span> creds: <span class="type">SmbCredentials</span> = {
+  <span class="prop">username</span>: <span class="str">'user'</span>,
+  <span class="prop">password</span>: <span class="str">'pass'</span>,
+};
+
+<span class="cmt">// Connect and mount share from URL</span>
+<span class="kw">const</span> info = <span class="kw">await</span> smb
+  .<span class="fn">connect</span>(<span class="str">'smb://192.168.1.100/Media'</span>, creds)
+  .<span class="fn">result</span>();
+console.<span class="fn">log</span>(info.share); <span class="cmt">// "Media"</span>
+
+<span class="cmt">// List root directory</span>
+<span class="kw">const</span> entries = <span class="kw">await</span> smb
+  .<span class="fn">listDirectory</span>(<span class="str">'/'</span>, <span class="kw">false</span>)
+  .<span class="fn">result</span>();
+
+<span class="cmt">// Download with progress</span>
+<span class="kw">const</span> task = smb.<span class="fn">downloadFile</span>(
+  <span class="str">'/video.mp4'</span>,
+  <span class="str">'/local/video.mp4'</span>,
+);
+task.<span class="fn">subscribe</span>((snap) => console.<span class="fn">log</span>(snap.progress));
+<span class="kw">await</span> task.<span class="fn">result</span>();</pre>
+        </div>
+
+        <p>Run the example app to explore the full feature set:</p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">terminal</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre>npm run example</pre>
+        </div>
+
+        <h2 id="url-format">URL format</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">SMB URL</span>
+          </div>
+          <pre>smb://[&lt;domain;&gt;][&lt;username&gt;@]&lt;host&gt;[:&lt;port&gt;]/&lt;share&gt;/&lt;path&gt;</pre>
+        </div>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Example</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>smb://nas.local/Photos</code></td><td>Connect to share <code>Photos</code> on <code>nas.local</code></td></tr>
+              <tr><td><code>smb://user@192.168.1.100/Documents</code></td><td>Username in URL (password via creds)</td></tr>
+              <tr><td><code>smb://WORKGROUP;admin@server/Share</code></td><td>Domain + username</td></tr>
+              <tr><td><code>smb://192.168.1.100:445/Media/video.mp4</code></td><td>Custom port and path</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2 id="compatibility">Compatibility</h2>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Dependency</th><th>Version</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>React Native</td><td class="col-type">&gt;= 0.76</td><td>Supported</td></tr>
+              <tr><td>React</td><td class="col-type">&gt;= 19</td><td>Supported</td></tr>
+              <tr><td>react-native-nitro-modules</td><td class="col-type">&gt;= 0.22, &lt; 1.0</td><td>Required</td></tr>
+              <tr><td>iOS</td><td class="col-type">12+</td><td>Supported</td></tr>
+              <tr><td>Android</td><td class="col-type">—</td><td>Coming soon</td></tr>
+              <tr><td>SMB protocol</td><td class="col-type">v2 / v3</td><td>Supported</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <nav class="docs-pager">
+          <a href="/react-native-smb/" class="docs-pager__link">
+            <div class="docs-pager__label">Previous</div>
+            <div class="docs-pager__title">Home</div>
+          </a>
+          <a href="/react-native-smb/docs/tasks.html" class="docs-pager__link docs-pager__link--next">
+            <div class="docs-pager__label">Next</div>
+            <div class="docs-pager__title">Task model</div>
+          </a>
+        </nav>
+      </article>
+    </div>
+      <aside class="docs-rail" data-docs-toc-right aria-label="Page contents"></aside>
+    </div>
+  </div>
+
+  <div data-site-footer></div>
+
+</body>
+</html>

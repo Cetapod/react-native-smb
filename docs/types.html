@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    .doc-search:not(.doc-search--open),[data-doc-search]:not(.doc-search--open){display:none!important;visibility:hidden!important;pointer-events:none!important}
+    .nav__icon-btn svg,.nav__theme svg{width:18px;height:18px;max-width:none}
+    .doc-search__icon{width:20px;height:20px;max-width:none}
+  </style>
+  <script>try{var t=localStorage.getItem("docs-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Types & enums — @cetapod/react-native-smb</title>
+  <link rel="icon" type="image/svg+xml" href="/react-native-smb/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-QZboNQF6.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-n7CQRKqD.js"></script>
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BoOIqQ8d.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+</head>
+<body class="docs-body" data-docs-page="types">
+
+  <nav class="nav" data-site-nav></nav>
+
+
+  <div class="docs-overlay" data-docs-overlay></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav class="docs-nav" data-docs-nav></nav>
+    </aside>
+
+    <div class="docs-body-wrap">
+      <div class="docs-main">
+
+      <article class="docs-content">
+        <h1>Types & enums</h1>
+        <p class="docs-lead">
+          Complete type reference — interfaces, enums, and classes exported from
+          <code>@cetapod/react-native-smb</code>.
+        </p>
+
+        <div class="docs-no-results" data-no-results>
+          <p>No types match your search.</p>
+        </div>
+
+        <h2 id="interfaces">Interfaces</h2>
+
+        <div class="type-card" id="smb-credentials" data-searchable="SmbCredentials username password credentials auth">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbCredentials</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">Authentication credentials passed to connect and initialize.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>username</code></td><td class="col-type">string</td><td>SMB username</td></tr>
+                <tr><td><code>password</code></td><td class="col-type">string</td><td>SMB password</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="smb-connection-info" data-searchable="SmbConnectionInfo url server share isConnected">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbConnectionInfo</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">Returned by <code>connect()</code> and <code>connectShare()</code>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>url</code></td><td class="col-type">string</td><td>Full connection URL</td></tr>
+                <tr><td><code>server</code></td><td class="col-type">string</td><td>Server hostname or IP</td></tr>
+                <tr><td><code>share</code></td><td class="col-type">string</td><td>Mounted share name</td></tr>
+                <tr><td><code>isConnected</code></td><td class="col-type">boolean</td><td>Connection active</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="smb-share-list" data-searchable="SmbShareList name comment shares">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbShareList</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">One entry from <code>listShares()</code>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>name</code></td><td class="col-type">string</td><td>Share name</td></tr>
+                <tr><td><code>comment</code></td><td class="col-type">string</td><td>Share description</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="smb-file-info" data-searchable="SmbFileInfo name path size isDirectory modifiedAt children">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbFileInfo</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">File or directory metadata from <code>listDirectory()</code> and <code>getPathInfo()</code>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>name</code></td><td class="col-type">string</td><td>Base name</td></tr>
+                <tr><td><code>path</code></td><td class="col-type">string</td><td>Full SMB path</td></tr>
+                <tr><td><code>size</code></td><td class="col-type">number</td><td>Size in bytes</td></tr>
+                <tr><td><code>isDirectory</code></td><td class="col-type">boolean</td><td>Directory flag</td></tr>
+                <tr><td><code>modifiedAt</code></td><td class="col-type">number</td><td>Unix timestamp (seconds)</td></tr>
+                <tr><td><code>accessedAt</code></td><td class="col-type">number</td><td>Last access time</td></tr>
+                <tr><td><code>createdAt</code></td><td class="col-type">number</td><td>Creation time</td></tr>
+                <tr><td><code>changedAt</code></td><td class="col-type">number</td><td>Metadata change time</td></tr>
+                <tr><td><code>childCount</code></td><td class="col-type">number?</td><td>Direct children count</td></tr>
+                <tr><td><code>children</code></td><td class="col-type">SmbFileInfo[]?</td><td>Nested entries (recursive list)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="smb-task-state" data-searchable="SmbTaskState progress status bytesDone bytesPerSecond taskId">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbTaskState</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">Live snapshot from <code>subscribe()</code> and <code>get()</code>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>taskId</code></td><td class="col-type">string</td><td>Task identifier</td></tr>
+                <tr><td><code>kind</code></td><td class="col-type">SmbOperatorKind</td><td>Operation type</td></tr>
+                <tr><td><code>status</code></td><td class="col-type">TaskStatus</td><td>Current status</td></tr>
+                <tr><td><code>determinate</code></td><td class="col-type">boolean</td><td>Progress is 0–1 ratio</td></tr>
+                <tr><td><code>progress</code></td><td class="col-type">number</td><td>0–1 completion</td></tr>
+                <tr><td><code>bytesDone</code></td><td class="col-type">number</td><td>Bytes transferred</td></tr>
+                <tr><td><code>totalBytes</code></td><td class="col-type">number</td><td>Total bytes expected</td></tr>
+                <tr><td><code>bytesPerSecond</code></td><td class="col-type">number</td><td>Current throughput</td></tr>
+                <tr><td><code>etaSeconds</code></td><td class="col-type">number</td><td>Estimated time remaining</td></tr>
+                <tr><td><code>sourcePath</code></td><td class="col-type">string</td><td>Source path (transfers)</td></tr>
+                <tr><td><code>destinationPath</code></td><td class="col-type">string</td><td>Destination path (transfers)</td></tr>
+                <tr><td><code>errorCode</code></td><td class="col-type">number</td><td>Error code on failure</td></tr>
+                <tr><td><code>errorMessage</code></td><td class="col-type">string</td><td>Human-readable error</td></tr>
+                <tr><td><code>startedAt</code></td><td class="col-type">number</td><td>Start timestamp (ms)</td></tr>
+                <tr><td><code>updatedAt</code></td><td class="col-type">number</td><td>Last update (ms)</td></tr>
+                <tr><td><code>endedAt</code></td><td class="col-type">number</td><td>End timestamp (ms)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="pool-types" data-searchable="PoolInfo PoolSlotInfo poolSize slots index interactiveOnly state">
+          <div class="type-card__header">
+            <span class="type-card__name">PoolInfo / PoolSlotInfo</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">Connection pool diagnostics from <code>getPoolInfo()</code>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>PoolInfo field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>poolSize</code></td><td class="col-type">number</td><td>Total slots (4)</td></tr>
+                <tr><td><code>slots</code></td><td class="col-type">PoolSlotInfo[]</td><td>Per-slot state</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>PoolSlotInfo field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>index</code></td><td class="col-type">number</td><td>Slot index 0–3</td></tr>
+                <tr><td><code>interactiveOnly</code></td><td class="col-type">boolean</td><td>Slot 0 flag</td></tr>
+                <tr><td><code>state</code></td><td class="col-type">SlotState</td><td>Idle / Assigned / Activating</td></tr>
+                <tr><td><code>isConnected</code></td><td class="col-type">boolean</td><td>TCP session active</td></tr>
+                <tr><td><code>shareName</code></td><td class="col-type">string</td><td>Mounted share</td></tr>
+                <tr><td><code>taskId</code></td><td class="col-type">string</td><td>Current task ID</td></tr>
+                <tr><td><code>kind</code></td><td class="col-type">SmbOperatorKind</td><td>Current operator</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="security" data-searchable="SmbSecurityDescriptor SmbAcl SmbAce ownerSid dacl ACL permissions">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbSecurityDescriptor / SmbAcl / SmbAce</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">Windows ACL from <code>getSecurityDescriptor()</code>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>SmbSecurityDescriptor</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>revision</code></td><td class="col-type">number</td><td>SD revision</td></tr>
+                <tr><td><code>control</code></td><td class="col-type">string[]</td><td>Control flags</td></tr>
+                <tr><td><code>ownerSid</code></td><td class="col-type">string</td><td>Owner SID</td></tr>
+                <tr><td><code>groupSid</code></td><td class="col-type">string</td><td>Group SID</td></tr>
+                <tr><td><code>dacl</code></td><td class="col-type">SmbAcl</td><td>Discretionary ACL</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>SmbAce</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>aceType</code></td><td class="col-type">string</td><td>ACE type</td></tr>
+                <tr><td><code>aceFlags</code></td><td class="col-type">string[]</td><td>Inheritance flags</td></tr>
+                <tr><td><code>mask</code></td><td class="col-type">string[]</td><td>Permission mask</td></tr>
+                <tr><td><code>sid</code></td><td class="col-type">string</td><td>Trustee SID</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="path-components" data-searchable="PathComponents parentDirectory baseFileName extension splitPath">
+          <div class="type-card__header">
+            <span class="type-card__name">PathComponents</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">Result of <code>splitPath()</code> utility.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>parentDirectory</code></td><td class="col-type">string</td><td>Parent path</td></tr>
+                <tr><td><code>baseFileName</code></td><td class="col-type">string</td><td>Name without extension</td></tr>
+                <tr><td><code>extension</code></td><td class="col-type">string</td><td>Extension with dot</td></tr>
+                <tr><td><code>fullFileName</code></td><td class="col-type">string</td><td>Complete filename</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h2 id="enums">Enums</h2>
+
+        <div class="type-card" id="task-status" data-searchable="TaskStatus Idle Pending Running Success Error Cancelled">
+          <div class="type-card__header">
+            <span class="type-card__name">TaskStatus</span>
+            <span class="type-badge type-badge--enum">enum</span>
+          </div>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Member</th><th>Value</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>Idle</code></td><td class="col-value">0</td><td>Not started</td></tr>
+                <tr><td><code>Pending</code></td><td class="col-value">1</td><td>Queued</td></tr>
+                <tr><td><code>Running</code></td><td class="col-value">2</td><td>In progress</td></tr>
+                <tr><td><code>Success</code></td><td class="col-value">3</td><td>Completed</td></tr>
+                <tr><td><code>Error</code></td><td class="col-value">4</td><td>Failed</td></tr>
+                <tr><td><code>Cancelled</code></td><td class="col-value">5</td><td>Aborted by user</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="smb-error" data-searchable="SmbError Unknown Cancelled NotFound AccessDenied NotConnected TimedOut">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbError</span>
+            <span class="type-badge type-badge--enum">enum</span>
+          </div>
+          <p class="type-card__desc">Error codes on <code>SmbTaskError.code</code>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Member</th><th>Value</th><th>Category</th></tr></thead>
+              <tbody>
+                <tr><td><code>Unknown</code></td><td class="col-value">0</td><td>General</td></tr>
+                <tr><td><code>Cancelled</code></td><td class="col-value">1</td><td>General</td></tr>
+                <tr><td><code>InvalidArgument</code></td><td class="col-value">100</td><td>Argument</td></tr>
+                <tr><td><code>NotFound</code></td><td class="col-value">101</td><td>Filesystem</td></tr>
+                <tr><td><code>AlreadyExists</code></td><td class="col-value">102</td><td>Filesystem</td></tr>
+                <tr><td><code>AccessDenied</code></td><td class="col-value">103</td><td>Filesystem</td></tr>
+                <tr><td><code>NotDirectory</code></td><td class="col-value">104</td><td>Filesystem</td></tr>
+                <tr><td><code>IsDirectory</code></td><td class="col-value">105</td><td>Filesystem</td></tr>
+                <tr><td><code>DirectoryNotEmpty</code></td><td class="col-value">106</td><td>Filesystem</td></tr>
+                <tr><td><code>NotConnected</code></td><td class="col-value">200</td><td>Connection</td></tr>
+                <tr><td><code>ConnectionRefused</code></td><td class="col-value">201</td><td>Connection</td></tr>
+                <tr><td><code>TimedOut</code></td><td class="col-value">202</td><td>Connection</td></tr>
+                <tr><td><code>Busy</code></td><td class="col-value">300</td><td>Resource</td></tr>
+                <tr><td><code>NoSpace</code></td><td class="col-value">301</td><td>Resource</td></tr>
+                <tr><td><code>Io</code></td><td class="col-value">302</td><td>Resource</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="smb-operator-kind" data-searchable="SmbOperatorKind Initialize Connect DownloadFile UploadFile ListDirectory">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbOperatorKind</span>
+            <span class="type-badge type-badge--enum">enum</span>
+          </div>
+          <p class="type-card__desc">Identifies the operation type on a task or pool slot.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Member</th><th>Value</th><th>Acquire mode</th></tr></thead>
+              <tbody>
+                <tr><td><code>Initialize</code></td><td class="col-value">0</td><td>—</td></tr>
+                <tr><td><code>Connect</code></td><td class="col-value">1</td><td>—</td></tr>
+                <tr><td><code>ConnectShare</code></td><td class="col-value">2</td><td>—</td></tr>
+                <tr><td><code>Disconnect</code></td><td class="col-value">3</td><td>—</td></tr>
+                <tr><td><code>ListShares</code></td><td class="col-value">4</td><td>Interactive</td></tr>
+                <tr><td><code>ListDirectory</code></td><td class="col-value">5</td><td>Interactive / Metadata*</td></tr>
+                <tr><td><code>GetPathInfo</code></td><td class="col-value">6</td><td>Interactive</td></tr>
+                <tr><td><code>GetSecurityDescriptor</code></td><td class="col-value">7</td><td>Interactive</td></tr>
+                <tr><td><code>DownloadFile</code></td><td class="col-value">8</td><td>Metadata</td></tr>
+                <tr><td><code>UploadFile</code></td><td class="col-value">9</td><td>Metadata</td></tr>
+                <tr><td><code>CreateDirectory</code></td><td class="col-value">10</td><td>Interactive</td></tr>
+                <tr><td><code>DeleteItem</code></td><td class="col-value">11</td><td>Metadata</td></tr>
+                <tr><td><code>MoveItem</code></td><td class="col-value">12</td><td>Interactive</td></tr>
+                <tr><td><code>RenameItem</code></td><td class="col-value">13</td><td>Interactive</td></tr>
+                <tr><td><code>CopyItem</code></td><td class="col-value">14</td><td>Metadata</td></tr>
+                <tr><td><code>DuplicateItem</code></td><td class="col-value">15</td><td>Metadata</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="padding:0 24px 16px;font-size:0.85rem;color:var(--text-secondary)">* <code>ListDirectory</code> uses Interactive for shallow lists, Metadata when recursive.</p>
+        </div>
+
+        <div class="type-card" id="slot-state" data-searchable="SlotState Idle Assigned Activating pool slot">
+          <div class="type-card__header">
+            <span class="type-card__name">SlotState</span>
+            <span class="type-badge type-badge--enum">enum</span>
+          </div>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Member</th><th>Value</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>Idle</code></td><td class="col-value">0</td><td>No task assigned</td></tr>
+                <tr><td><code>Assigned</code></td><td class="col-value">1</td><td>Task holding slot</td></tr>
+                <tr><td><code>Activating</code></td><td class="col-value">2</td><td>Connecting session</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h2 id="classes">Classes</h2>
+
+        <div class="type-card" id="smb-task" data-searchable="SmbTask result subscribe cancel settleAll id progress status">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbTask&lt;T&gt;</span>
+            <span class="type-badge type-badge--class">class</span>
+          </div>
+          <p class="type-card__desc">Handle for one native async operation. See <a href="/react-native-smb/docs/tasks.html">Task model</a>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>id</code></td><td class="col-type">string</td><td>Task identifier (readonly)</td></tr>
+                <tr><td><code>progress</code></td><td class="col-type">number</td><td>0–1 getter (after subscribe)</td></tr>
+                <tr><td><code>status</code></td><td class="col-type">TaskStatus</td><td>Status getter (after subscribe)</td></tr>
+                <tr><td><code>result()</code></td><td class="col-type">Promise&lt;T&gt;</td><td>Await typed result</td></tr>
+                <tr><td><code>subscribe(listener?)</code></td><td class="col-type">() =&gt; void</td><td>Subscribe; returns unsubscribe</td></tr>
+                <tr><td><code>cancel()</code></td><td class="col-type">void</td><td>Abort operation</td></tr>
+                <tr><td><code>get()</code></td><td class="col-type">SmbTaskState | null</td><td>One-shot snapshot</td></tr>
+                <tr><td><code>SmbTask.settleAll(tasks)</code></td><td class="col-type">static</td><td>Promise.allSettled over results</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="smb-task-error" data-searchable="SmbTaskError Error code taskId message">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbTaskError</span>
+            <span class="type-badge type-badge--class">class</span>
+          </div>
+          <p class="type-card__desc">Thrown when <code>task.result()</code> rejects. Extends <code>Error</code>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>code</code></td><td class="col-type">SmbError</td><td>Structured error code</td></tr>
+                <tr><td><code>taskId</code></td><td class="col-type">string?</td><td>Associated task ID</td></tr>
+                <tr><td><code>message</code></td><td class="col-type">string</td><td>Human-readable message</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <nav class="docs-pager">
+          <a href="/react-native-smb/docs/api.html" class="docs-pager__link">
+            <div class="docs-pager__label">Previous</div>
+            <div class="docs-pager__title">API reference</div>
+          </a>
+          <a href="/react-native-smb/docs/architecture.html" class="docs-pager__link docs-pager__link--next">
+            <div class="docs-pager__label">Next</div>
+            <div class="docs-pager__title">Architecture</div>
+          </a>
+        </nav>
+      </article>
+    </div>
+      <aside class="docs-rail" data-docs-toc-right aria-label="Page contents"></aside>
+    </div>
+  </div>
+
+  <div data-site-footer></div>
+
+</body>
+</html>

@@ -1,0 +1,24 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0b1628"/>
+      <stop offset="100%" style="stop-color:#1e3a5f"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4a90e2"/>
+      <stop offset="100%" style="stop-color:#2e5c8a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="980" cy="120" r="200" fill="#4a90e2" opacity="0.12"/>
+  <circle cx="200" cy="520" r="160" fill="#2ecc71" opacity="0.08"/>
+  <rect x="80" y="200" width="360" height="72" rx="12" fill="url(#accent)" opacity="0.25"/>
+  <rect x="80" y="290" width="300" height="72" rx="12" fill="#ffffff" opacity="0.08"/>
+  <rect x="80" y="380" width="330" height="72" rx="12" fill="#ffffff" opacity="0.08"/>
+  <circle cx="110" cy="236" r="8" fill="#4a90e2"/>
+  <circle cx="140" cy="236" r="8" fill="#2ecc71"/>
+  <circle cx="170" cy="236" r="8" fill="#e74c3c"/>
+  <text x="80" y="140" font-family="system-ui, sans-serif" font-size="28" font-weight="600" fill="#7ba8d1" letter-spacing="3">CETAPOD</text>
+  <text x="80" y="520" font-family="system-ui, sans-serif" font-size="52" font-weight="700" fill="#ffffff">Native SMB for React Native</text>
+  <text x="80" y="575" font-family="ui-monospace, monospace" font-size="26" fill="#7ba8d1">@cetapod/react-native-smb</text>
+</svg>

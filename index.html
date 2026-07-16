@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    .doc-search:not(.doc-search--open),[data-doc-search]:not(.doc-search--open){display:none!important;visibility:hidden!important;pointer-events:none!important}
+    .nav__icon-btn svg,.nav__theme svg{width:18px;height:18px;max-width:none}
+    .doc-search__icon{width:20px;height:20px;max-width:none}
+  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>@cetapod/react-native-smb — Native SMB for React Native</title>
+  <meta name="description" content="SMB client for React Native via libsmb2 and Nitro Modules. SmbTask per operation, 4-slot connection pool, 8-chunk pipelining, React hooks." />
+  <meta name="keywords" content="react-native, smb, libsmb2, nitro, native-module, file-transfer, nas" />
+  <meta property="og:title" content="@cetapod/react-native-smb — Native SMB for React Native" />
+  <meta property="og:description" content="SMB client for React Native via libsmb2 and Nitro Modules. SmbTask per operation, 4-slot connection pool, React hooks." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/react-native-smb/og-image.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="/react-native-smb/og-image.svg" />
+  <script>try{var t=localStorage.getItem('docs-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+  <link rel="icon" type="image/svg+xml" href="/react-native-smb/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/react-native-smb/assets/main-C_Cww9XY.js"></script>
+  <link rel="modulepreload" crossorigin href="/react-native-smb/assets/site-footer-QZboNQF6.js">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BoOIqQ8d.css">
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <nav class="nav" data-site-nav></nav>
+
+  <!-- ─── Hero ─── -->
+  <header class="hero" id="main">
+    <div class="hero__mesh"></div>
+    <div class="hero__grid"></div>
+    <div class="hero__orb"></div>
+    <div class="container hero__content">
+      <div class="hero__text">
+        <div class="hero__badge">
+          <span class="hero__badge-dot"></span>
+          <span data-version-badge>v1.0.0 — iOS ready, Android coming</span>
+        </div>
+        <h1 class="hero__title">Native <em>SMB</em><br />for React Native</h1>
+        <p class="hero__package">@cetapod/react-native-smb</p>
+        <p class="hero__tagline">
+          Connect to NAS, file servers, and Windows shares from your mobile app.
+          Powered by <strong>libsmb2</strong> and <strong>Nitro Modules</strong> —
+          with a task-first API built for real transfers.
+        </p>
+        <div class="hero__install">
+          <code>npm install @cetapod/react-native-smb react-native-nitro-modules</code>
+          <button class="copy-btn" data-copy="npm install @cetapod/react-native-smb react-native-nitro-modules">
+            <span class="copy-label">Copy</span>
+          </button>
+        </div>
+        <div class="hero__ctas">
+          <a href="/react-native-smb/docs/" class="btn btn--primary">Read the docs</a>
+          <a href="https://github.com/cetapod/react-native-smb" class="btn btn--ghost" target="_blank" rel="noopener">
+            View on GitHub
+          </a>
+        </div>
+      </div>
+      <div class="hero__visual">
+        <div class="hero__connections">
+          <div class="connection-line connection-line--1"></div>
+          <div class="connection-line connection-line--2"></div>
+          <div class="connection-line connection-line--3"></div>
+        </div>
+        <div class="hero__server">
+          <div class="server-rack">
+            <div class="server-rack__unit">
+              <div class="server-rack__lights">
+                <span class="server-rack__light server-rack__light--blue"></span>
+                <span class="server-rack__light server-rack__light--green"></span>
+                <span class="server-rack__light server-rack__light--amber"></span>
+              </div>
+              <span class="server-rack__label">//Media</span>
+              <span class="server-rack__status">SMB3</span>
+            </div>
+            <div class="server-rack__unit">
+              <div class="server-rack__lights">
+                <span class="server-rack__light server-rack__light--blue"></span>
+                <span class="server-rack__light server-rack__light--green"></span>
+              </div>
+              <span class="server-rack__label">//Documents</span>
+              <span class="server-rack__status">SMB2</span>
+            </div>
+            <div class="server-rack__unit">
+              <div class="server-rack__lights">
+                <span class="server-rack__light server-rack__light--blue"></span>
+                <span class="server-rack__light server-rack__light--green"></span>
+                <span class="server-rack__light server-rack__light--amber"></span>
+              </div>
+              <span class="server-rack__label">//Backups</span>
+              <span class="server-rack__status">SMB3</span>
+            </div>
+          </div>
+          <div class="hero__device">
+            <div class="hero__device-screen">
+              <div class="mini-bar"><div class="mini-bar__fill"></div></div>
+              <div class="mini-bar"><div class="mini-bar__fill" style="width:40%;animation-delay:0.5s"></div></div>
+              <div class="hero__device-label">downloadFile · 65%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── Trust bar ─── -->
+  <div class="trust-bar" id="trust">
+    <div class="container trust-bar__inner">
+      <div class="trust-bar__item">
+        <svg class="trust-bar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span><strong>SMBv2/v3</strong> protocol</span>
+      </div>
+      <div class="trust-bar__item">
+        <svg class="trust-bar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <span><strong>iOS 12+</strong> supported</span>
+      </div>
+      <div class="trust-bar__item">
+        <svg class="trust-bar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span><strong>Nitro</strong> JSI native bridge</span>
+      </div>
+      <div class="trust-bar__item">
+        <svg class="trust-bar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        <span><strong>LGPL-2.1</strong> license</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Features ─── -->
+  <section id="features" class="section">
+    <div class="container reveal">
+      <span class="section-label">Why this library</span>
+      <h2 class="section-title">Built for real file operations</h2>
+      <p class="section-desc">
+        Not a thin wrapper — a full SMB client with connection pooling,
+        pipelined transfers, and a task model designed for mobile UX.
+      </p>
+      <div class="features__grid">
+        <article class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <h3>SmbTask per operation</h3>
+          <p>Every call returns a task — await <code>.result()</code>, watch with <code>.subscribe()</code>, or abort with <code>.cancel()</code>. Mix all three freely.</p>
+          <span class="feature-card__tag">result · subscribe · cancel</span>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+          </div>
+          <h3>4-slot connection pool</h3>
+          <p>Up to four parallel SMB sessions. Slot 0 is reserved for interactive ops — list, rename, move — so UI never blocks behind bulk transfers.</p>
+          <span class="feature-card__tag">interactive-priority slot 0</span>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <h3>8-chunk pipelining</h3>
+          <p>Within each transfer, up to eight SMB2 READ/WRITE requests in flight on the same connection. Credit-based pipelining for maximum throughput.</p>
+          <span class="feature-card__tag">kMaxInFlight = 8</span>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <h3>React hooks</h3>
+          <p><code>useSubscribe</code> mirrors task subscriptions. <code>useTransfers</code> powers a transfer tray — track every download and upload in your UI.</p>
+          <span class="feature-card__tag">useSubscribe · useTransfers</span>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 12l2 2 4-4"/></svg>
+          </div>
+          <h3>Typed errors</h3>
+          <p><code>SmbError</code> and <code>SmbTaskError</code> with structured codes. Know exactly why a connection failed or a transfer was interrupted.</p>
+          <span class="feature-card__tag">SmbError · SmbTaskError</span>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          </div>
+          <h3>libsmb2 + Nitro</h3>
+          <p>Battle-tested C SMB stack exposed through Nitro's JSI bridge. Static types from TypeScript to C++ — no bridge serialization overhead.</p>
+          <span class="feature-card__tag">native performance</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Use cases ─── -->
+  <section id="use-cases" class="section section--alt">
+    <div class="container reveal">
+      <span class="section-label">Built for</span>
+      <h2 class="section-title">Real apps that talk to file servers</h2>
+      <p class="section-desc">
+        Whether you're building a consumer NAS app or an enterprise file tool,
+        the task-first API and connection pool keep UI responsive during heavy I/O.
+      </p>
+      <div class="use-cases__grid">
+        <article class="use-case">
+          <div class="use-case__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          </div>
+          <h3>NAS &amp; file browsers</h3>
+          <p>Browse shares, preview files, and manage folders on Synology, QNAP, Windows, or Samba — with list and metadata ops prioritized on slot 0.</p>
+        </article>
+        <article class="use-case">
+          <div class="use-case__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          </div>
+          <h3>Media &amp; photo apps</h3>
+          <p>Stream or download large assets from network shares. Pipelined transfers and <code>useTransfers</code> give you tray UI with live progress and cancel.</p>
+        </article>
+        <article class="use-case">
+          <div class="use-case__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          </div>
+          <h3>Enterprise document access</h3>
+          <p>Authenticate with domain credentials, read ACLs via <code>getSecurityDescriptor</code>, and integrate with existing SMB infrastructure on iOS.</p>
+        </article>
+        <article class="use-case">
+          <div class="use-case__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <h3>Backup &amp; sync utilities</h3>
+          <p>Upload and download in parallel across pool slots. Batch deletes with <code>SmbTask.settleAll</code> and deterministic error handling per file.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Architecture ─── -->
+  <section id="architecture" class="section section--dark">
+    <div class="container reveal">
+      <span class="section-label">Under the hood</span>
+      <h2 class="section-title">Connection pool &amp; pipeline</h2>
+      <p class="section-desc">
+        Parallelism at two levels — across tasks via the pool,
+        within transfers via chunk pipelining.
+      </p>
+      <div class="architecture__layout">
+        <div class="pool-viz">
+          <div class="pool-viz__header">
+            <span class="pool-viz__title">SmbConnectionPool(4)</span>
+            <span class="pool-viz__status">
+              <span class="pool-viz__status-dot"></span>
+              live
+            </span>
+          </div>
+          <div class="pool-slots">
+            <div class="pool-slot pool-slot--interactive">
+              <div class="pool-slot__index">slot <span>0</span></div>
+              <div class="pool-slot__bar"><div class="pool-slot__bar-fill"></div></div>
+              <div class="pool-slot__task">listDirectory</div>
+              <span class="pool-slot__badge">interactive only</span>
+            </div>
+            <div class="pool-slot">
+              <div class="pool-slot__index">slot <span>1</span></div>
+              <div class="pool-slot__bar"><div class="pool-slot__bar-fill"></div></div>
+              <div class="pool-slot__task">—</div>
+            </div>
+            <div class="pool-slot">
+              <div class="pool-slot__index">slot <span>2</span></div>
+              <div class="pool-slot__bar"><div class="pool-slot__bar-fill"></div></div>
+              <div class="pool-slot__task">—</div>
+            </div>
+            <div class="pool-slot">
+              <div class="pool-slot__index">slot <span>3</span></div>
+              <div class="pool-slot__bar"><div class="pool-slot__bar-fill"></div></div>
+              <div class="pool-slot__task">—</div>
+            </div>
+          </div>
+          <div class="pipeline-viz">
+            <div class="pipeline-viz__label">SmbFileIO — 8-chunk pipeline (single transfer)</div>
+            <div class="pipeline-chunks">
+              <span class="pipeline-chunk">1</span>
+              <span class="pipeline-chunk">2</span>
+              <span class="pipeline-chunk">3</span>
+              <span class="pipeline-chunk">4</span>
+              <span class="pipeline-chunk">5</span>
+              <span class="pipeline-chunk">6</span>
+              <span class="pipeline-chunk">7</span>
+              <span class="pipeline-chunk">8</span>
+            </div>
+          </div>
+        </div>
+        <div class="architecture__details">
+          <div class="arch-detail">
+            <h4>Interactive-priority scheduling</h4>
+            <p>Slot 0 accepts only interactive operators — shallow list, path info, rename, move. Bulk metadata work uses slots 1–3. When slot 0 is busy, interactive ops overflow to general slots rather than queuing behind downloads.</p>
+          </div>
+          <div class="arch-detail">
+            <h4>Independent sessions, not multichannel</h4>
+            <p>Each pool slot is a full <code>smb2_context</code> with its own TCP socket. The server sees N separate client connections. Application-level scheduling on top of what libsmb2 provides.</p>
+            <div class="arch-detail__compare">
+              <div class="arch-detail__compare-item">
+                <strong>This pool</strong>
+                One session per slot · N connections · Slot 0 for UI
+              </div>
+              <div class="arch-detail__compare-item">
+                <strong>SMB3 multichannel</strong>
+                One session · N channels · Requires server support
+              </div>
+            </div>
+          </div>
+          <div class="arch-detail">
+            <h4>Diagnostics built in</h4>
+            <p><code>getPoolInfo()</code> and <code>subscribePoolInfo()</code> expose slot state, task IDs, and operator kinds. The example app includes a <code>PoolDebugPanel</code> for real-time inspection.</p>
+          </div>
+        </div>
+      </div>
+      <p class="architecture__cta reveal">
+        <a href="/react-native-smb/docs/architecture.html" class="arch-cta">
+          Read full architecture
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── Code showcase ─── -->
+  <section id="code" class="section code-showcase">
+    <div class="container reveal">
+      <span class="section-label">Get started</span>
+      <h2 class="section-title">A few lines to connect</h2>
+      <p class="section-desc">
+        Install, connect to a share, list files, download with progress.
+      </p>
+      <div class="code-showcase__layout" data-tabs>
+        <div class="code-tabs__nav">
+          <button class="code-tabs__tab code-tabs__tab--active" data-tab="quickstart">
+            <div class="code-tabs__tab-title">Quick start</div>
+            <div class="code-tabs__tab-desc">Connect, list, download</div>
+          </button>
+          <button class="code-tabs__tab" data-tab="subscribe">
+            <div class="code-tabs__tab-title">Watch progress</div>
+            <div class="code-tabs__tab-desc">Subscribe to transfer updates</div>
+          </button>
+          <button class="code-tabs__tab" data-tab="hooks">
+            <div class="code-tabs__tab-title">React hooks</div>
+            <div class="code-tabs__tab-desc">Transfer tray in your UI</div>
+          </button>
+          <button class="code-tabs__tab" data-tab="settle">
+            <div class="code-tabs__tab-title">Batch operations</div>
+            <div class="code-tabs__tab-desc">Settle multiple tasks at once</div>
+          </button>
+        </div>
+        <div class="code-tabs__panels">
+          <div class="code-tabs__panel code-tabs__panel--active" data-panel="quickstart">
+            <div class="code-block">
+              <div class="code-block__header">
+                <div class="code-block__dots">
+                  <span class="code-block__dot code-block__dot--red"></span>
+                  <span class="code-block__dot code-block__dot--yellow"></span>
+                  <span class="code-block__dot code-block__dot--green"></span>
+                </div>
+                <span class="code-block__filename">App.tsx</span>
+              </div>
+              <div class="code-block__body">
+<pre><span class="kw">import</span> { SMB, <span class="type">SmbCredentials</span> } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">const</span> smb = <span class="fn">SMB</span>();
+<span class="kw">const</span> creds: <span class="type">SmbCredentials</span> = {
+  <span class="prop">username</span>: <span class="str">'user'</span>,
+  <span class="prop">password</span>: <span class="str">'pass'</span>,
+};
+
+<span class="kw">await</span> smb.<span class="fn">connect</span>(<span class="str">'smb://192.168.1.100/Media'</span>, creds).<span class="fn">result</span>();
+<span class="kw">const</span> entries = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/'</span>, <span class="kw">false</span>).<span class="fn">result</span>();
+
+<span class="kw">const</span> task = smb.<span class="fn">downloadFile</span>(<span class="str">'/video.mp4'</span>, <span class="str">'/local/video.mp4'</span>);
+task.<span class="fn">subscribe</span>((snap) => console.<span class="fn">log</span>(snap.progress));
+<span class="kw">await</span> task.<span class="fn">result</span>();</pre>
+              </div>
+            </div>
+          </div>
+          <div class="code-tabs__panel" data-panel="subscribe">
+            <div class="code-block">
+              <div class="code-block__header">
+                <div class="code-block__dots">
+                  <span class="code-block__dot code-block__dot--red"></span>
+                  <span class="code-block__dot code-block__dot--yellow"></span>
+                  <span class="code-block__dot code-block__dot--green"></span>
+                </div>
+                <span class="code-block__filename">transfer.ts</span>
+              </div>
+              <div class="code-block__body">
+<pre><span class="kw">const</span> task = smb.<span class="fn">downloadFile</span>(remote, local);
+
+<span class="cmt">// Live getters after subscribe()</span>
+<span class="kw">const</span> unsub = task.<span class="fn">subscribe</span>((snap) => {
+  console.<span class="fn">log</span>(
+    snap.progress,
+    snap.bytesPerSecond,
+    snap.status,
+  );
+});
+
+<span class="cmt">// Or subscribe without callback — read task.progress</span>
+task.<span class="fn">subscribe</span>();
+console.<span class="fn">log</span>(task.progress, task.status);
+
+<span class="cmt">// User aborts</span>
+task.<span class="fn">cancel</span>();
+unsub();</pre>
+              </div>
+            </div>
+          </div>
+          <div class="code-tabs__panel" data-panel="hooks">
+            <div class="code-block">
+              <div class="code-block__header">
+                <div class="code-block__dots">
+                  <span class="code-block__dot code-block__dot--red"></span>
+                  <span class="code-block__dot code-block__dot--yellow"></span>
+                  <span class="code-block__dot code-block__dot--green"></span>
+                </div>
+                <span class="code-block__filename">TransferTray.tsx</span>
+              </div>
+              <div class="code-block__body">
+<pre><span class="kw">import</span> {
+  useTransfers,
+  useTransferActions,
+  useSubscribe,
+} <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="kw">function</span> <span class="fn">TransferTray</span>() {
+  <span class="kw">const</span> transfers = <span class="fn">useTransfers</span>();
+  <span class="kw">const</span> { cancel, clear } = <span class="fn">useTransferActions</span>();
+
+  <span class="kw">return</span> transfers.<span class="fn">map</span>((t) => (
+    &lt;Row key={t.id} progress={t.progress} /&gt;
+  ));
+}
+
+<span class="kw">function</span> <span class="fn">TaskBar</span>({ task }) {
+  <span class="kw">const</span> { progress } = <span class="fn">useSubscribe</span>(task);
+  <span class="kw">return</span> &lt;Bar value={progress} /&gt;;
+}</pre>
+              </div>
+            </div>
+          </div>
+          <div class="code-tabs__panel" data-panel="settle">
+            <div class="code-block">
+              <div class="code-block__header">
+                <div class="code-block__dots">
+                  <span class="code-block__dot code-block__dot--red"></span>
+                  <span class="code-block__dot code-block__dot--yellow"></span>
+                  <span class="code-block__dot code-block__dot--green"></span>
+                </div>
+                <span class="code-block__filename">batch.ts</span>
+              </div>
+              <div class="code-block__body">
+<pre><span class="kw">import</span> { <span class="type">SmbTask</span> } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
+
+<span class="cmt">// Delete multiple files — collect all outcomes</span>
+<span class="kw">const</span> tasks = files.<span class="fn">map</span>((f) =>
+  smb.<span class="fn">deleteItem</span>(f.path)
+);
+
+<span class="kw">const</span> results = <span class="kw">await</span> <span class="type">SmbTask</span>.<span class="fn">settleAll</span>(tasks);
+<span class="cmt">// Like Promise.allSettled over .result()</span>
+
+<span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> results) {
+  <span class="kw">if</span> (r.status === <span class="str">'fulfilled'</span>) {
+    console.<span class="fn">log</span>(<span class="str">'deleted'</span>, r.value);
+  }
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Docs ─── -->
+  <section id="docs" class="section section--dark">
+    <div class="container reveal">
+      <span class="section-label">Documentation</span>
+      <h2 class="section-title">Everything you need</h2>
+      <p class="section-desc">
+        Deep dives into the task model, API surface, and connection pool internals.
+      </p>
+      <div class="docs__grid">
+        <a href="/react-native-smb/docs/" class="doc-card">
+          <div class="doc-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div>
+            <h3>Getting started</h3>
+            <p>Install, quick start, URL format, and compatibility requirements.</p>
+          </div>
+          <svg class="doc-card__arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="/react-native-smb/docs/tasks.html" class="doc-card">
+          <div class="doc-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <div>
+            <h3>Task model</h3>
+            <p>Subscribe, fire-and-forget, transfer tray, error handling patterns.</p>
+          </div>
+          <svg class="doc-card__arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="/react-native-smb/docs/api.html" class="doc-card">
+          <div class="doc-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+          </div>
+          <div>
+            <h3>API reference</h3>
+            <p>Every method with signature, parameters, and copy-paste examples.</p>
+          </div>
+          <svg class="doc-card__arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="/react-native-smb/docs/types.html" class="doc-card">
+          <div class="doc-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          </div>
+          <div>
+            <h3>Types & enums</h3>
+            <p>Interfaces, enums, and classes — full field tables with values.</p>
+          </div>
+          <svg class="doc-card__arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="/react-native-smb/docs/architecture.html" class="doc-card">
+          <div class="doc-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </div>
+          <div>
+            <h3>Connection pool</h3>
+            <p>Slots, acquire modes, chunk pipeline, multichannel comparison.</p>
+          </div>
+          <svg class="doc-card__arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="https://github.com/cetapod/react-native-smb/tree/main/example" class="doc-card" target="_blank" rel="noopener">
+          <div class="doc-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+          </div>
+          <div>
+            <h3>Example app</h3>
+            <p>Expo dev-client demo — login, file browser, transfer tray, pool debug.</p>
+          </div>
+          <svg class="doc-card__arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+      <p class="docs-hub__cta reveal">
+        <a href="/react-native-smb/docs/" class="btn btn--outline docs-hub__btn">View all documentation</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── Compatibility ─── -->
+  <section id="compat" class="section">
+    <div class="container reveal">
+      <span class="section-label">Compatibility</span>
+      <h2 class="section-title">Requirements</h2>
+      <p class="section-desc">Works with modern React Native and Nitro Modules.</p>
+      <div class="compat__table-wrap">
+        <table class="compat__table">
+          <thead>
+            <tr>
+              <th>Platform / dependency</th>
+              <th>Version</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>React Native</td>
+              <td>&gt;= 0.76</td>
+              <td><span class="compat__badge compat__badge--yes">Supported</span></td>
+            </tr>
+            <tr>
+              <td>React</td>
+              <td>&gt;= 19</td>
+              <td><span class="compat__badge compat__badge--yes">Supported</span></td>
+            </tr>
+            <tr>
+              <td>react-native-nitro-modules</td>
+              <td>&gt;= 0.22, &lt; 1.0</td>
+              <td><span class="compat__badge compat__badge--yes">Required</span></td>
+            </tr>
+            <tr>
+              <td>iOS</td>
+              <td>12+</td>
+              <td><span class="compat__badge compat__badge--yes">Supported</span></td>
+            </tr>
+            <tr>
+              <td>Android</td>
+              <td>—</td>
+              <td><span class="compat__badge compat__badge--soon">Coming soon</span></td>
+            </tr>
+            <tr>
+              <td>SMB protocol</td>
+              <td>v2 / v3</td>
+              <td><span class="compat__badge compat__badge--yes">Supported</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── CTA ─── -->
+  <section class="cta">
+    <div class="container reveal">
+      <div class="cta__box">
+        <div class="cta__content">
+          <h2 class="cta__title">Ready to connect?</h2>
+          <p class="cta__desc">
+            Install from npm, run the example app, and start building
+            NAS-aware mobile experiences today.
+          </p>
+          <div class="cta__actions">
+            <a href="https://www.npmjs.com/package/@cetapod/react-native-smb" class="btn btn--primary" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-1.834 13.47L5.13 5.323z"/></svg>
+              View on npm
+            </a>
+            <a href="https://github.com/cetapod/react-native-smb" class="btn btn--ghost" target="_blank" rel="noopener">
+              Star on GitHub
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div data-site-footer></div>
+
+</body>
+</html>

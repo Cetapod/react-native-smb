@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    .doc-search:not(.doc-search--open),[data-doc-search]:not(.doc-search--open){display:none!important;visibility:hidden!important;pointer-events:none!important}
+    .nav__icon-btn svg,.nav__theme svg{width:18px;height:18px;max-width:none}
+    .doc-search__icon{width:20px;height:20px;max-width:none}
+  </style>
+  <script>try{var t=localStorage.getItem("docs-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture — @cetapod/react-native-smb</title>
+  <link rel="icon" type="image/svg+xml" href="/react-native-smb/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-QZboNQF6.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-n7CQRKqD.js"></script>
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BoOIqQ8d.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+</head>
+<body class="docs-body" data-docs-page="architecture">
+
+  <nav class="nav" data-site-nav></nav>
+
+
+  <div class="docs-overlay" data-docs-overlay></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav class="docs-nav" data-docs-nav></nav>
+    </aside>
+
+    <div class="docs-body-wrap">
+      <div class="docs-main">
+
+      <article class="docs-content">
+        <h1>Architecture</h1>
+        <p class="docs-lead">
+          Parallelism at two levels — across tasks via the connection pool,
+          within transfers via chunk pipelining on a single SMB session.
+        </p>
+
+        <h2 id="pool">Connection pool</h2>
+        <p>
+          <code>HybridSMB</code> runs up to four SMB operations in parallel through
+          <code>SmbConnectionPool(4)</code>. Each slot is one <code>smb2_context</code> —
+          its own TCP socket and full session:
+        </p>
+        <div class="docs-code">
+          <div class="docs-code__header"><span class="docs-code__filename">session flow</span></div>
+          <pre>TCP → NEGOTIATE → SESSION SETUP → TREE CONNECT</pre>
+        </div>
+        <p>
+          Tasks call <code>requestContext(mode)</code>, hold a slot for the operator's lifetime,
+          then release via <code>PoolContextHandle</code>. One operator per slot (mutex on the context).
+          Work on different slots runs concurrently.
+        </p>
+
+        <h2 id="slots">Slot assignment</h2>
+        <div class="docs-pool">
+          <div class="docs-pool__slot docs-pool__slot--interactive">
+            <div class="docs-pool__slot-index">slot 0</div>
+            <div class="docs-pool__slot-label">interactive only</div>
+          </div>
+          <div class="docs-pool__slot">
+            <div class="docs-pool__slot-index">slot 1</div>
+            <div class="docs-pool__slot-label">general</div>
+          </div>
+          <div class="docs-pool__slot">
+            <div class="docs-pool__slot-index">slot 2</div>
+            <div class="docs-pool__slot-label">general</div>
+          </div>
+          <div class="docs-pool__slot">
+            <div class="docs-pool__slot-index">slot 3</div>
+            <div class="docs-pool__slot-label">general</div>
+          </div>
+        </div>
+
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Slot</th><th>Accepts</th><th>Typical work</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>slot[0]</code></td>
+                <td><code>Interactive</code> only</td>
+                <td><code>listDirectory</code>, <code>getPathInfo</code>, rename, move</td>
+              </tr>
+              <tr>
+                <td><code>slot[1..3]</code></td>
+                <td>Any mode</td>
+                <td>Download, upload, copy, delete; grows on demand</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout callout--info">
+          <svg class="callout__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <div>
+            <strong>Slot 0 is UI insurance.</strong> Interactive ops never queue behind bulk metadata work.
+            When slot 0 is busy, interactive work overflows to slots 1–3.
+          </div>
+        </div>
+
+        <h2 id="acquire-modes">Acquire modes</h2>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Mode</th><th>Operators</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>Interactive</code></td>
+                <td><code>getPathInfo</code>, shallow <code>listDirectory</code>, <code>moveItem</code>, <code>renameItem</code>, <code>createDirectory</code>, <code>getSecurityDescriptor</code>, <code>listShares</code></td>
+              </tr>
+              <tr>
+                <td><code>Metadata</code></td>
+                <td><code>downloadFile</code>, <code>uploadFile</code>, <code>copyItem</code>, <code>duplicateItem</code>, <code>deleteItem</code>, recursive <code>listDirectory</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>FIFO queue per mode.</p>
+
+        <h2 id="multichannel">Pool vs SMB3 multichannel</h2>
+        <p>
+          The server sees each active slot as a <strong>separate client connection</strong> —
+          multiple full sessions to the same host/share, not channels bound to one session.
+        </p>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th></th><th>This pool</th><th>SMB3 multichannel</th></tr></thead>
+            <tbody>
+              <tr><td>Sessions</td><td>One per slot</td><td>One across channels</td></tr>
+              <tr><td>Server view</td><td>N connections</td><td>1 client, N channels</td></tr>
+              <tr><td>Slot 0 reserved for UI</td><td>Yes</td><td>—</td></tr>
+              <tr><td>Requires server multichannel cap</td><td>No</td><td>Yes</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          libsmb2 does not implement SMB3 multichannel. Each <code>smb2_context</code> maps to one
+          file descriptor, so the pool uses independent contexts instead.
+        </p>
+
+        <h2 id="pipeline">Chunk pipeline</h2>
+        <p>
+          Cross-task parallelism is the pool. Within a single transfer,
+          <code>SmbFileIO</code> pipelines up to <strong>eight</strong> SMB2 READ/WRITE requests
+          on the same <code>smb2_context</code> (<code>kMaxInFlight</code>).
+        </p>
+        <p>
+          Same connection, same session — credit-based pipelining, separate from slot assignment.
+        </p>
+
+        <h2 id="diagnostics">Diagnostics</h2>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">pool-debug.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">const</span> info = smb.<span class="fn">getPoolInfo</span>();
+<span class="kw">const</span> id = smb.<span class="fn">subscribePoolInfo</span>((snap) => console.<span class="fn">log</span>(snap));
+smb.<span class="fn">unsubscribePoolInfo</span>(id);</pre>
+        </div>
+        <p><code>PoolSlotInfo</code> fields: <code>index</code>, <code>interactiveOnly</code>, <code>state</code>, <code>isConnected</code>, <code>shareName</code>, <code>taskId</code>, <code>kind</code>.</p>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Observation</th><th>Likely cause</th></tr></thead>
+            <tbody>
+              <tr><td>Same <code>index</code> turning over quickly</td><td>Tasks queuing on one slot</td></tr>
+              <tr><td>Slots 1–3 all <code>Assigned</code>, metadata pending</td><td>Pool full</td></tr>
+              <tr><td>Interactive <code>kind</code> on slot 1–3</td><td>Slot 0 was busy</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>See <code>example/components/PoolDebugPanel.js</code> for a live debug UI.</p>
+
+        <nav class="docs-pager">
+          <a href="/react-native-smb/docs/types.html" class="docs-pager__link">
+            <div class="docs-pager__label">Previous</div>
+            <div class="docs-pager__title">Types & enums</div>
+          </a>
+          <a href="/react-native-smb/" class="docs-pager__link docs-pager__link--next">
+            <div class="docs-pager__label">Next</div>
+            <div class="docs-pager__title">Back to home</div>
+          </a>
+        </nav>
+      </article>
+    </div>
+      <aside class="docs-rail" data-docs-toc-right aria-label="Page contents"></aside>
+    </div>
+  </div>
+
+  <div data-site-footer></div>
+
+</body>
+</html>
