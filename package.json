@@ -1,7 +1,7 @@
 {
   "name": "@cetapod/react-native-smb",
   "version": "1.0.0",
-  "description": "A React Native Nitro module exposing libsmb2 C++ library for SMB client functionality",
+  "description": "SMB client for React Native — simply access, manage, and transfer files across network shares.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
@@ -19,19 +19,22 @@
     "example": "npm run setup:example && cd example && npm run ios",
     "example:prebuild": "npm run setup:example && cd example && npm run prebuild:ios"
   },
+  "license": "LGPL-2.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cetapod/react-native-smb.git"
   },
+  "homepage": "https://cetapod.github.io/react-native-smb",
   "keywords": [
     "react-native",
     "expo",
     "nitro",
-    "native-module",
+    "turbomodule",
     "smb",
+    "cifs",
+    "samba",
     "libsmb2",
-    "react-native-smb",
-    "@cetapod/react-native-smb"
+    "file-transfer"
   ],
   "author": "Cetapod open source <open-source@cetapod.com>",
   "publishConfig": {
@@ -53,11 +56,7 @@
     "lib/",
     "cpp/",
     "ios/",
-    "android/",
-    "scripts/",
     "docs/",
-    "ReactNativeSmb.podspec",
-    "README.md",
-    "LICENSE"
+    "ReactNativeSmb.podspec"
   ]
 }
