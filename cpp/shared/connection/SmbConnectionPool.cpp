@@ -72,7 +72,7 @@ void SmbConnectionPool::tryAssignNext() {
             if (!req) break;
 
             slotIdx = findIdleSlot(req->mode);
-            if (slotIdx == SIZE_MAX && req->mode == AcquireMode::Metadata) slotIdx = maybeGrowSlot();
+            if (slotIdx == SIZE_MAX && canGrowPoolSlot(req->kind)) slotIdx = maybeGrowSlot();
             if (slotIdx == SIZE_MAX) {
                 queue_.requeueFront(std::move(req));
                 break;

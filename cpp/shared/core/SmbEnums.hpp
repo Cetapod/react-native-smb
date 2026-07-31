@@ -104,6 +104,22 @@ constexpr bool isTransferKind(SmbOperatorKind k) {
     }
 }
 
+// Connection/session lifecycle ops stay on the primary path and must not grow
+// the pool. Listing, transfers, and mutations may create a general slot when
+// no idle slot is available (up to maxConnections).
+constexpr bool canGrowPoolSlot(SmbOperatorKind k) {
+    switch (k) {
+        case SmbOperatorKind::Initialize:
+        case SmbOperatorKind::Connect:
+        case SmbOperatorKind::ConnectShare:
+        case SmbOperatorKind::Disconnect:
+        case SmbOperatorKind::ListShares:
+            return false;
+        default:
+            return true;
+    }
+}
+
 // Lowercase status name for the JS bridge. Index mirrors SmbTaskStatus.
 constexpr const char* statusName(SmbTaskStatus s) {
     switch (s) {
