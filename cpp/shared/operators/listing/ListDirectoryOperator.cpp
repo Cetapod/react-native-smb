@@ -2,18 +2,21 @@
 
 #include "../../connection/SmbConnectionPool.hpp"
 #include "../../io/SmbDirScan.hpp"
+#include "../../io/SmbParallelDirScan.hpp"
 
 namespace react_native_smb {
 
 void ListDirectoryOperator::run() {
-
-    const AcquireMode mode = (!recursive_ || maxDepth_ == 0) ? AcquireMode::Interactive : AcquireMode::Metadata;
-    auto handle = requestContext(mode);
-
     const CancellationToken token = cancelToken();
-    result_ = handle.submitSync([&](smb2_context* ctx) { return listOnCtx(ctx, path_, recursive_, maxDepth_, token); });
-    publishThisResult();
 
+    if (!recursive_ || maxDepth_ == 0) {
+        auto handle = requestContext(AcquireMode::Interactive);
+        result_ = handle.submitSync([&](smb2_context* ctx) { return scanDirectoryOnCtx(ctx, path_, token); });
+    } else {
+        result_ = listDirectoryParallel(pool(), owningTaskId(), path_, maxDepth_, token);
+    }
+
+    publishThisResult();
     emitStatus(SmbTaskStatus::Success);
 }
 

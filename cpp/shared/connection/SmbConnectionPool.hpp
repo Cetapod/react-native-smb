@@ -46,6 +46,7 @@ class SmbConnectionPool {
     void cancelRequestsForTask(const std::string& taskId);
 
     // [getter]
+    size_t maxConnections() const { return maxConnections_; }
     std::string getCurrentUrl() const;
     std::string getServerName() const;
     std::string getShareName() const;
