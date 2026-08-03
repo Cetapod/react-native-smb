@@ -13,8 +13,9 @@
 
 namespace react_native_smb {
 
-// Directory listing on a single smb2_context. Does not use the connection pool.
-inline std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, const std::string& path, bool recursive, int maxDepth, const CancellationToken& cancel) {
+// Single-level directory listing on one smb2_context. No recursion.
+// Does not use the connection pool.
+inline std::vector<SmbFileInfo> scanDirectoryOnCtx(smb2_context* ctx, const std::string& path, const CancellationToken& cancel) {
     std::vector<SmbFileInfo> files;
     const std::string norm = path_util::normalized(path);
 
@@ -53,6 +54,10 @@ inline std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, const std::string& 
         int64_t count = 0;
         struct smb2dirent* subEnt;
         while ((subEnt = smb2_readdir(ctx, sub))) {
+            if (cancel.cancelled()) {
+                smb2_closedir(ctx, sub);
+                return {};
+            }
             std::string n = subEnt->name;
             if (n == "." || n == "..") continue;
             ++count;
@@ -60,6 +65,14 @@ inline std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, const std::string& 
         smb2_closedir(ctx, sub);
         item.childCount = count;
     }
+
+    return files;
+}
+
+// Directory listing on a single smb2_context with optional serial recursion.
+inline std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, const std::string& path, bool recursive, int maxDepth, const CancellationToken& cancel) {
+    std::vector<SmbFileInfo> files = scanDirectoryOnCtx(ctx, path, cancel);
+    if (cancel.cancelled()) return {};
 
     if (recursive && maxDepth != 0) {
         for (auto& item : files) {
