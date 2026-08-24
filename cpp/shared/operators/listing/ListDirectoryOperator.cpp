@@ -11,9 +11,10 @@ void ListDirectoryOperator::run() {
 
     if (!recursive_ || maxDepth_ == 0) {
         auto handle = requestContext(AcquireMode::Interactive);
-        result_ = handle.submitSync([&](smb2_context* ctx) { return scanDirectoryOnCtx(ctx, path_, token); });
+        result_ = handle.submitSync(
+            [&](smb2_context* ctx) { return scanDirectoryOnCtx(ctx, path_, token, includeSecurityDescriptor_, &handle.manager()); });
     } else {
-        result_ = listDirectoryParallel(pool(), owningTaskId(), path_, maxDepth_, token);
+        result_ = listDirectoryParallel(pool(), owningTaskId(), path_, maxDepth_, token, includeSecurityDescriptor_);
     }
 
     publishThisResult();

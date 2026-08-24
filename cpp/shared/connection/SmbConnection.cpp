@@ -366,6 +366,13 @@ void SmbConnectionManager::checkAndConnect(const std::string& taskId) {
     }
 }
 
+void SmbConnectionManager::invalidateContext() {
+    std::lock_guard<std::recursive_timed_mutex> lock(connectionMutex_);
+    context_.reset();
+    isConnected_ = false;
+    isInitialized_ = false;
+}
+
 void SmbConnectionManager::initializeContext() {
     if (context_) {
         context_.reset();

@@ -34,19 +34,6 @@ struct SmbConnectionInfo {
     bool isConnected;
 };
 
-struct SmbFileInfo {
-    std::string name;
-    std::string path;
-    int64_t size;
-    bool isDirectory;
-    int64_t modifiedAt;                 // Content modification time (smb2_mtime)
-    int64_t accessedAt;                 // Last access time (smb2_atime)
-    int64_t createdAt;                  // Creation time (smb2_btime)
-    int64_t changedAt;                  // Attribute change time (smb2_ctime)
-    int64_t childCount;                 // Directories: number of immediate children; -1 if unknown / not a directory
-    std::vector<SmbFileInfo> children;  // Nested children for directories (when recursive)
-};
-
 struct SmbAce {
     std::string aceType;                // Type of ACE (e.g., "ACCESS_ALLOWED_ACE",
                                         // "ACCESS_DENIED_ACE")
@@ -70,6 +57,20 @@ struct SmbSecurityDescriptor {
     SmbAcl dacl;
 };
 
+struct SmbFileInfo {
+    std::string name;
+    std::string path;
+    int64_t size;
+    bool isDirectory;
+    int64_t modifiedAt;                 // Content modification time (smb2_mtime)
+    int64_t accessedAt;                 // Last access time (smb2_atime)
+    int64_t createdAt;                  // Creation time (smb2_btime)
+    int64_t changedAt;                  // Attribute change time (smb2_ctime)
+    int64_t childCount;                 // Directories: number of immediate children; -1 if unknown / not a directory
+    std::vector<SmbFileInfo> children;  // Nested children for directories (when recursive)
+    std::optional<SmbSecurityDescriptor> securityDescriptor;
+};
+
 class ReactNativeSmb : public virtual HybridObject {
    public:
     virtual ~ReactNativeSmb() = default;
@@ -85,7 +86,7 @@ class ReactNativeSmb : public virtual HybridObject {
     virtual std::shared_ptr<SmbTask> listShares(const std::string& taskId) = 0;
 
     // --- Listing & Info ---
-    virtual std::shared_ptr<SmbTask> listDirectory(const std::string& taskId, const std::string& path, bool recursive, int maxDepth) = 0;
+    virtual std::shared_ptr<SmbTask> listDirectory(const std::string& taskId, const std::string& path, bool recursive, int maxDepth, bool includeSecurityDescriptor) = 0;
     virtual std::shared_ptr<SmbTask> getPathInfo(const std::string& taskId, const std::string& path) = 0;
     virtual std::shared_ptr<SmbTask> getSecurityDescriptor(const std::string& taskId, const std::string& path) = 0;
 
@@ -124,6 +125,11 @@ class ReactNativeSmb : public virtual HybridObject {
 
 namespace margelo::nitro {
 using namespace react_native_smb;
+
+namespace react_native_smb_detail {
+inline jsi::Value smbSecurityDescriptorToJSI(jsi::Runtime& runtime, const SmbSecurityDescriptor& sd);
+inline SmbSecurityDescriptor smbSecurityDescriptorFromJSI(jsi::Runtime& runtime, const jsi::Value& value);
+}  // namespace react_native_smb_detail
 
 template <>
 struct JSIConverter<SmbCredentials> {
@@ -195,6 +201,11 @@ struct JSIConverter<SmbFileInfo> {
         }
         obj.setProperty(runtime, "children", std::move(childrenArray));
 
+        if (fileInfo.securityDescriptor.has_value()) {
+            obj.setProperty(runtime, "securityDescriptor",
+                            react_native_smb_detail::smbSecurityDescriptorToJSI(runtime, *fileInfo.securityDescriptor));
+        }
+
         return obj;
     }
 
@@ -220,6 +231,14 @@ struct JSIConverter<SmbFileInfo> {
             }
         }
 
+        std::optional<SmbSecurityDescriptor> securityDescriptor;
+        if (obj.hasProperty(runtime, "securityDescriptor")) {
+            jsi::Value securityDescriptorValue = obj.getProperty(runtime, "securityDescriptor");
+            if (securityDescriptorValue.isObject()) {
+                securityDescriptor = react_native_smb_detail::smbSecurityDescriptorFromJSI(runtime, securityDescriptorValue);
+            }
+        }
+
         return SmbFileInfo{obj.getProperty(runtime, "name").asString(runtime).utf8(runtime),
                            obj.getProperty(runtime, "path").asString(runtime).utf8(runtime),
                            static_cast<int64_t>(obj.getProperty(runtime, "size").asNumber()),
@@ -228,8 +247,9 @@ struct JSIConverter<SmbFileInfo> {
                            static_cast<int64_t>(obj.hasProperty(runtime, "accessedAt") ? obj.getProperty(runtime, "accessedAt").asNumber() : 0),
                            static_cast<int64_t>(obj.hasProperty(runtime, "createdAt") ? obj.getProperty(runtime, "createdAt").asNumber() : 0),
                            static_cast<int64_t>(obj.hasProperty(runtime, "changedAt") ? obj.getProperty(runtime, "changedAt").asNumber() : 0),
-                           static_cast<int64_t>(obj.hasProperty(runtime, "childCount") ? obj.getProperty(runtime, "childCount").asNumber() : -1),
-                           children};
+                            static_cast<int64_t>(obj.hasProperty(runtime, "childCount") ? obj.getProperty(runtime, "childCount").asNumber() : -1),
+                            children,
+                            securityDescriptor};
     }
 
     static bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) { return value.isObject(); }
@@ -424,5 +444,15 @@ struct JSIConverter<SmbSecurityDescriptor> {
 
     static bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) { return value.isObject(); }
 };
+
+namespace react_native_smb_detail {
+inline jsi::Value smbSecurityDescriptorToJSI(jsi::Runtime& runtime, const SmbSecurityDescriptor& sd) {
+    return JSIConverter<SmbSecurityDescriptor>::toJSI(runtime, sd);
+}
+
+inline SmbSecurityDescriptor smbSecurityDescriptorFromJSI(jsi::Runtime& runtime, const jsi::Value& value) {
+    return JSIConverter<SmbSecurityDescriptor>::fromJSI(runtime, value);
+}
+}  // namespace react_native_smb_detail
 
 }  // namespace margelo::nitro

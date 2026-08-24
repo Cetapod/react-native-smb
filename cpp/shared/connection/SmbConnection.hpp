@@ -63,6 +63,7 @@ class SmbConnectionManager {
 
     void checkAndInitialize(const std::string& taskId = "");
     void checkAndConnect(const std::string& taskId = "");
+    void invalidateContext();
 
     bool isConnected() const { return isConnected_; }
     bool isInitialized() const { return isInitialized_; }

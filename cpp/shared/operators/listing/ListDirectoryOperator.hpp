@@ -12,7 +12,8 @@ namespace react_native_smb {
 // across Metadata pool slots via listDirectoryParallel (bounded by maxConnections-1).
 class ListDirectoryOperator : public Operator<std::vector<SmbFileInfo>> {
    public:
-    ListDirectoryOperator(std::string path, bool recursive, int maxDepth) : path_(std::move(path)), recursive_(recursive), maxDepth_(maxDepth) {}
+    ListDirectoryOperator(std::string path, bool recursive, int maxDepth, bool includeSecurityDescriptor)
+        : path_(std::move(path)), recursive_(recursive), maxDepth_(maxDepth), includeSecurityDescriptor_(includeSecurityDescriptor) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::ListDirectory; }
     void run() override;
@@ -21,6 +22,7 @@ class ListDirectoryOperator : public Operator<std::vector<SmbFileInfo>> {
     std::string path_;
     bool recursive_;
     int maxDepth_;
+    bool includeSecurityDescriptor_;
 };
 
 }  // namespace react_native_smb

@@ -84,12 +84,13 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
    * @param path Directory path (use "/" for root)
    * @param recursive Whether to list recursively (default: false)
    * @param maxDepth Maximum recursion depth (-1 = unlimited, 0 = current only)
+   * @param includeSecurityDescriptor Whether to fetch each item's security descriptor
    * @param taskId Unique ID for the task
    * @param onStatusChange Callback for status updates
    * @param onProgress Callback for progress updates
    * @returns SmbTask resolving to array of file/directory info
    */
-  listDirectory(taskId: string, path: string, recursive: boolean, maxDepth: number): NativeSmbTask;
+  listDirectory(taskId: string, path: string, recursive: boolean, maxDepth: number, includeSecurityDescriptor: boolean): NativeSmbTask;
 
 
   /**

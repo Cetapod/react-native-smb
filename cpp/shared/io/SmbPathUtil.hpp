@@ -68,6 +68,7 @@ inline SmbFileInfo makeFileInfo(const struct smb2_stat_64& stat, const std::stri
         static_cast<int64_t>(stat.smb2_ctime),
         -1,
         {},
+        std::nullopt,
     };
 }
 

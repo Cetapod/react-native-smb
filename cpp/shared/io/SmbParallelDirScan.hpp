@@ -23,7 +23,7 @@ namespace react_native_smb {
 // Bounded-parallel recursive listing. Each directory scan borrows a Metadata
 // pool slot. Entry order within each directory matches readdir().
 inline std::vector<SmbFileInfo> listDirectoryParallel(SmbConnectionPool& pool, const std::string& taskId, const std::string& path, int maxDepth,
-                                                      const CancellationToken& cancel) {
+                                                       const CancellationToken& cancel, bool includeSecurityDescriptor = false) {
     struct WorkItem {
         std::string path;
         int maxDepth{0};
@@ -99,8 +99,9 @@ inline std::vector<SmbFileInfo> listDirectoryParallel(SmbConnectionPool& pool, c
 
                 try {
                     auto handle = pool.requestContext(AcquireMode::Metadata, SmbOperatorKind::ListDirectory, taskId);
-                    std::vector<SmbFileInfo> files =
-                        handle.submitSync([&](smb2_context* ctx) { return scanDirectoryOnCtx(ctx, item.path, cancel); });
+                    std::vector<SmbFileInfo> files = handle.submitSync([&](smb2_context* ctx) {
+                        return scanDirectoryOnCtx(ctx, item.path, cancel, includeSecurityDescriptor, &handle.manager());
+                    });
 
                     if (cancel.cancelled()) {
                         abortFromWorker();

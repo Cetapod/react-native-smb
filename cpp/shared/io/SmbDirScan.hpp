@@ -10,12 +10,14 @@
 #include "../ReactNativeSmb.hpp"  // SmbFileInfo
 #include "../core/CancellationToken.hpp"
 #include "SmbPathUtil.hpp"
+#include "SmbSecurityQuery.hpp"
 
 namespace react_native_smb {
 
 // Single-level directory listing on one smb2_context. No recursion.
 // Does not use the connection pool.
-inline std::vector<SmbFileInfo> scanDirectoryOnCtx(smb2_context* ctx, const std::string& path, const CancellationToken& cancel) {
+inline std::vector<SmbFileInfo> scanDirectoryOnCtx(smb2_context* ctx, const std::string& path, const CancellationToken& cancel,
+                                                   bool includeSecurityDescriptor = false, SmbConnectionManager* manager = nullptr) {
     std::vector<SmbFileInfo> files;
     const std::string norm = path_util::normalized(path);
 
@@ -64,6 +66,19 @@ inline std::vector<SmbFileInfo> scanDirectoryOnCtx(smb2_context* ctx, const std:
         }
         smb2_closedir(ctx, sub);
         item.childCount = count;
+    }
+
+    if (includeSecurityDescriptor && manager) {
+        for (auto& item : files) {
+            if (cancel.cancelled()) return {};
+            try {
+                item.securityDescriptor = querySecurityDescriptorOnCtx(ctx, path_util::normalized(item.path), *manager);
+            } catch (const SmbSecurityQueryTransportError&) {
+                break;
+            } catch (...) {
+                item.securityDescriptor.reset();
+            }
+        }
     }
 
     return files;

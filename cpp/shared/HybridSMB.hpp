@@ -64,7 +64,7 @@ class HybridSMB : public ReactNativeSmb {
     std::shared_ptr<SmbTask> listShares(const std::string& taskId) override;
 
     // --- Listing & Info ---
-    std::shared_ptr<SmbTask> listDirectory(const std::string& taskId, const std::string& path, bool recursive, int maxDepth) override;
+    std::shared_ptr<SmbTask> listDirectory(const std::string& taskId, const std::string& path, bool recursive, int maxDepth, bool includeSecurityDescriptor) override;
     std::shared_ptr<SmbTask> getPathInfo(const std::string& taskId, const std::string& path) override;
     std::shared_ptr<SmbTask> getSecurityDescriptor(const std::string& taskId, const std::string& path) override;
 

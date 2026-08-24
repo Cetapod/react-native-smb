@@ -68,8 +68,8 @@ export class SmbClient {
     return this.op((id) => this.native.listShares(id));
   }
 
-  listDirectory(path: string, recursive = false, maxDepth = -1): SmbTask<SmbFileInfo[]> {
-    return this.op((id) => this.native.listDirectory(id, path, recursive, maxDepth));
+  listDirectory(path: string, recursive = false, maxDepth = -1, includeSecurityDescriptor = false): SmbTask<SmbFileInfo[]> {
+    return this.op((id) => this.native.listDirectory(id, path, recursive, maxDepth, includeSecurityDescriptor));
   }
 
   getPathInfo(path: string): SmbTask<SmbFileInfo> {

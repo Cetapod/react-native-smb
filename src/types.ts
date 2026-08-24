@@ -55,6 +55,7 @@ export interface SmbFileInfo {
   readonly changedAt: number;
   readonly childCount?: number;
   readonly children?: SmbFileInfo[];
+  readonly securityDescriptor?: SmbSecurityDescriptor;
 }
 
 export interface SmbAce {

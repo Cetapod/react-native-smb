@@ -30,7 +30,7 @@ interface SmbShareList { name: string; comment: string; }
 
 | Method | Returns | `result()` type | Notes |
 | ------ | ------- | --------------- | ----- |
-| `listDirectory(path, recursive?, maxDepth?)` | `SmbTask<SmbFileInfo[]>` | `SmbFileInfo[]` | `maxDepth: -1` = unlimited |
+| `listDirectory(path, recursive?, maxDepth?, includeSecurityDescriptor?)` | `SmbTask<SmbFileInfo[]>` | `SmbFileInfo[]` | `maxDepth: -1` = unlimited; SD defaults to `false` |
 | `getPathInfo(path)` | `SmbTask<SmbFileInfo>` | `SmbFileInfo` | |
 | `downloadFile(remote, local)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
 | `uploadFile(local, remote)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
@@ -47,7 +47,15 @@ interface SmbFileInfo {
   name: string; path: string; size: number; isDirectory: boolean;
   modifiedAt: number; accessedAt: number; createdAt: number; changedAt: number;
   childCount?: number; children?: SmbFileInfo[];
+  securityDescriptor?: SmbSecurityDescriptor;
 }
+```
+
+Set `includeSecurityDescriptor` to `true` to issue an additional SD query for each returned item, including recursive children. If an item's SD query fails, the item remains in the result without `securityDescriptor`.
+
+```typescript
+const files = await smb.listDirectory('/', false, -1, true).result();
+const firstDacl = files[0]?.securityDescriptor?.dacl;
 ```
 
 ## Pool
