@@ -5,6 +5,7 @@
 #include "../../connection/SmbConnectionPool.hpp"
 #include "../../io/SmbDirScan.hpp"
 #include "../../io/SmbPathUtil.hpp"
+#include "../../io/SmbSecurityQuery.hpp"
 
 namespace react_native_smb {
 
@@ -33,6 +34,14 @@ void GetPathInfoOperator::run() {
 
     if (!found) {
         throw std::runtime_error("Failed to get path info for '" + path_ + "': File not found.");
+    }
+
+    try {
+        info.securityDescriptor = handle.submitSync([&](smb2_context* ctx) {
+            return querySecurityDescriptorOnCtx(ctx, path_util::normalized(path_), handle.manager());
+        });
+    } catch (...) {
+        info.securityDescriptor.reset();
     }
 
     result_ = info;

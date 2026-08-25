@@ -31,7 +31,7 @@ interface SmbShareList { name: string; comment: string; }
 | Method | Returns | `result()` type | Notes |
 | ------ | ------- | --------------- | ----- |
 | `listDirectory(path, recursive?, maxDepth?, includeSecurityDescriptor?)` | `SmbTask<SmbFileInfo[]>` | `SmbFileInfo[]` | `maxDepth: -1` = unlimited; SD defaults to `false` |
-| `getPathInfo(path)` | `SmbTask<SmbFileInfo>` | `SmbFileInfo` | |
+| `getPathInfo(path)` | `SmbTask<SmbFileInfo>` | `SmbFileInfo` | Includes SD when available |
 | `downloadFile(remote, local)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
 | `uploadFile(local, remote)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
 | `createDirectory(path)` | `SmbTask<void>` | `void` | Creates parents |
@@ -52,6 +52,8 @@ interface SmbFileInfo {
 ```
 
 Set `includeSecurityDescriptor` to `true` to issue an additional SD query for each returned item, including recursive children. If an item's SD query fails, the item remains in the result without `securityDescriptor`.
+
+`getPathInfo` always attempts the SD query for its item. If that query fails, path metadata is still returned without `securityDescriptor`.
 
 ```typescript
 const files = await smb.listDirectory('/', false, -1, true).result();

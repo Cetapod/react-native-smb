@@ -100,7 +100,7 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
    * @param taskId Unique ID for the task
    * @param onStatusChange Callback for status updates
    * @param onProgress Callback for progress updates
-   * @returns SmbTask resolving to file information
+   * @returns SmbTask resolving to file information with a security descriptor when available
    */
   getPathInfo(taskId: string, path: string): NativeSmbTask;
 
