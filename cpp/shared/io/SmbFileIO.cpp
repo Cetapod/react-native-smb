@@ -827,7 +827,7 @@ bool drivePollLoop(smb2_context* ctx, DoneFn&& done) {
 
 }  // anonymous namespace
 
-int64_t smbReadFileAsync(void* ctxVoid, const std::string& remotePath, const std::string& localPath, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
+int64_t smbReadFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std::string& remotePath, const std::string& localPath, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
     smb2_context* ctx = static_cast<smb2_context*>(ctxVoid);
 
     AsyncReadState state;
@@ -894,9 +894,14 @@ int64_t smbReadFileAsync(void* ctxVoid, const std::string& remotePath, const std
         state.errored = true;
         state.errorMsg = "Download Failed: I/O pipeline stalled (unrecoverable short transfer)";
     }
-    if (!pollOk && !state.errored) {
-        state.errored = true;
-        state.errorMsg = std::string("Download Failed: poll/service: ") + smb2_get_error(ctx);
+    if (!pollOk) {
+        if (!state.errored) {
+            state.errored = true;
+            state.errorMsg = std::string("Download Failed: poll/service: ") + smb2_get_error(ctx);
+        }
+        manager.invalidateContext();
+        state.ctx = nullptr;
+        state.fh = nullptr;
     }
 
     state.cleanup();
@@ -914,7 +919,7 @@ int64_t smbReadFileAsync(void* ctxVoid, const std::string& remotePath, const std
     return state.bytesCompleted;
 }
 
-int64_t smbWriteFileAsync(void* ctxVoid, const std::string& localPath, const std::string& remotePath, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
+int64_t smbWriteFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std::string& localPath, const std::string& remotePath, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
     smb2_context* ctx = static_cast<smb2_context*>(ctxVoid);
 
     AsyncWriteState state;
@@ -980,9 +985,14 @@ int64_t smbWriteFileAsync(void* ctxVoid, const std::string& localPath, const std
         state.errored = true;
         state.errorMsg = "Upload Failed: I/O pipeline stalled (unrecoverable short transfer)";
     }
-    if (!pollOk && !state.errored) {
-        state.errored = true;
-        state.errorMsg = std::string("Upload Failed: poll/service: ") + smb2_get_error(ctx);
+    if (!pollOk) {
+        if (!state.errored) {
+            state.errored = true;
+            state.errorMsg = std::string("Upload Failed: poll/service: ") + smb2_get_error(ctx);
+        }
+        manager.invalidateContext();
+        state.ctx = nullptr;
+        state.fh = nullptr;
     }
 
     if (state.errored) {
@@ -1263,7 +1273,7 @@ struct AsyncCopyState {
 
 }  // anonymous namespace
 
-int64_t smbCopyFileAsync(void* ctxVoid, const std::string& fromPath, const std::string& toPath, std::shared_ptr<int64_t> totalBytesCopied, int64_t totalSize,
+int64_t smbCopyFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std::string& fromPath, const std::string& toPath, std::shared_ptr<int64_t> totalBytesCopied, int64_t totalSize,
                          std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
     smb2_context* ctx = static_cast<smb2_context*>(ctxVoid);
 
@@ -1332,9 +1342,15 @@ int64_t smbCopyFileAsync(void* ctxVoid, const std::string& fromPath, const std::
         state.errored = true;
         state.errorMsg = "Copy Failed: I/O pipeline stalled (unrecoverable short transfer)";
     }
-    if (!pollOk && !state.errored) {
-        state.errored = true;
-        state.errorMsg = std::string("Copy Failed: poll/service: ") + smb2_get_error(ctx);
+    if (!pollOk) {
+        if (!state.errored) {
+            state.errored = true;
+            state.errorMsg = std::string("Copy Failed: poll/service: ") + smb2_get_error(ctx);
+        }
+        manager.invalidateContext();
+        state.ctx = nullptr;
+        state.srcFh = nullptr;
+        state.dstFh = nullptr;
     }
 
     if (state.errored) {

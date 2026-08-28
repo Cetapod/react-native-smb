@@ -18,7 +18,7 @@ void UploadFileOperator::run() {
     const CancellationToken token = cancelToken();
     handle.submitSync([&](smb2_context* ctx) {
         smbWriteFileAsync(
-            ctx, local, remote, [this](double done, double total) { emitProgress(done, total); }, token);
+            ctx, handle.manager(), local, remote, [this](double done, double total) { emitProgress(done, total); }, token);
     });
 
     emitStatus(SmbTaskStatus::Success);

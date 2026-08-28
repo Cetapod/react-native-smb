@@ -28,6 +28,10 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
                          const std::function<void(int64_t)>& onExpectedBytes, const std::string& taskId = "",
                          MetadataContextLease* sharedLease = nullptr) {
     const std::string normFrom = path_util::normalized(fromPath);
+    const std::string normTo = path_util::normalized(toPath);
+    if ((normFrom.empty() && !normTo.empty()) || path_util::isDescendant(normFrom, normTo)) {
+        throw std::invalid_argument("Copy Failed: destination cannot be inside the source directory");
+    }
 
     std::optional<MetadataContextLease> ownedLease;
     if (!sharedLease) {
@@ -53,7 +57,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
     if (!isDirectory) {
         sharedLease->submitSync([&](smb2_context* ctx) {
             SMB_LOG("CopyTree file taskId=%s from=%s to=%s", taskId.c_str(), fromPath.c_str(), toPath.c_str());
-            smbCopyFileAsync(ctx, path_util::normalized(fromPath), path_util::normalized(toPath), totalBytesCopied, totalSize, onProgress, cancel);
+            smbCopyFileAsync(ctx, sharedLease->manager(), path_util::normalized(fromPath), path_util::normalized(toPath), totalBytesCopied, totalSize, onProgress, cancel);
         });
         if (onProgress) onProgress(static_cast<double>(totalSize), static_cast<double>(totalSize));
         SMB_LOG("CopyTree finish taskId=%s copiedBytes=%lld totalBytes=%lld cancelled=%d", taskId.c_str(), static_cast<long long>(*totalBytesCopied),
@@ -67,7 +71,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         int64_t size;
     };
     std::vector<CopyJob> files;
-    const std::string normToRoot = path_util::normalized(toPath);
+    const std::string normToRoot = normTo;
     sharedLease->submitSync([&](smb2_context* ctx) {
         const int mk = smb2_mkdir(ctx, normToRoot.c_str());
         if (mk < 0) throw std::runtime_error("Failed to create destination directory: " + std::string(smb2_get_error(ctx)));
@@ -102,7 +106,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         if (cancel.cancelled()) break;
         sharedLease->submitSync([&](smb2_context* ctx) {
             SMB_LOG("CopyTree file taskId=%s from=%s to=%s size=%lld", taskId.c_str(), job.src.c_str(), job.dst.c_str(), static_cast<long long>(job.size));
-            smbCopyFileAsync(ctx, path_util::normalized(job.src), path_util::normalized(job.dst), totalBytesCopied, totalSize, onProgress, cancel);
+            smbCopyFileAsync(ctx, sharedLease->manager(), path_util::normalized(job.src), path_util::normalized(job.dst), totalBytesCopied, totalSize, onProgress, cancel);
         });
     }
 

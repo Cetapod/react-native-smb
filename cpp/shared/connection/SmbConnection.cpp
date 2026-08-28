@@ -5,6 +5,7 @@
 #include <smb2/libsmb2-raw.h>
 
 #include <cerrno>
+#include <memory>
 #include <stdexcept>
 
 namespace react_native_smb {
@@ -12,6 +13,13 @@ namespace react_native_smb {
 namespace {
 constexpr int kShareEnumPollTimeoutMs = 5000;
 constexpr int kShareEnumMaxIdlePolls = 12;
+
+struct ShareEnumContext {
+    std::vector<SmbShareList>* shares;
+    std::string error;
+    int errorCode;
+    bool finished;
+};
 
 [[noreturn]] void throwError(const std::string& /*taskId*/, const std::string& message, int /*code*/) {
     throw std::runtime_error(message);
@@ -187,6 +195,7 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
     }
 
     std::vector<SmbShareList> shares;
+    auto enumContext = std::make_unique<ShareEnumContext>(ShareEnumContext{&shares, "", static_cast<int>(SmbErrorCode::Unknown), false});
 
     auto ipcContext = std::shared_ptr<smb2_context>(smb2_init_context(), [](smb2_context* ctx) {
         if (ctx) {
@@ -209,13 +218,6 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
     if (ipcConnectResult < 0) {
         throwError(taskId, "Failed to connect to IPC$ share: " + std::string(smb2_get_error(ipcContext.get())), SmbErrorMapper::fromErrnoResult(ipcConnectResult));
     }
-
-    struct ShareEnumContext {
-        std::vector<SmbShareList>* shares;
-        std::string error;
-        int errorCode;
-        bool finished;
-    } enumContext = {&shares, "", static_cast<int>(SmbErrorCode::Unknown), false};
 
     auto shareEnumCallback = [](struct smb2_context* smb2, int status, void* command_data, void* private_data) {
         ShareEnumContext* ctx = static_cast<ShareEnumContext*>(private_data);
@@ -251,14 +253,14 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
         smb2_free_data(smb2, rep);
     };
 
-    const int enumStartResult = smb2_share_enum_async(ipcContext.get(), SHARE_INFO_1, shareEnumCallback, &enumContext);
+    const int enumStartResult = smb2_share_enum_async(ipcContext.get(), SHARE_INFO_1, shareEnumCallback, enumContext.get());
     if (enumStartResult != 0) {
         throwError(taskId, "Failed to start share enumeration: " + std::string(smb2_get_error(ipcContext.get())), SmbErrorMapper::fromErrnoResult(enumStartResult));
     }
 
     struct pollfd pfd;
     int idlePolls = 0;
-    while (!enumContext.finished) {
+    while (!enumContext->finished) {
         pfd.fd = smb2_get_fd(ipcContext.get());
         pfd.events = smb2_which_events(ipcContext.get());
 
@@ -280,8 +282,8 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
         }
     }
 
-    if (!enumContext.error.empty()) {
-        throwError(taskId, enumContext.error, enumContext.errorCode);
+    if (!enumContext->error.empty()) {
+        throwError(taskId, enumContext->error, enumContext->errorCode);
     }
 
     smb2_disconnect_share(ipcContext.get());

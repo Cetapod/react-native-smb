@@ -13,7 +13,8 @@ const char* acquireModeName(AcquireMode mode) {
 }
 }  // namespace
 
-SmbConnectionPool::SmbConnectionPool(size_t maxConnections) : maxConnections_(maxConnections) {
+SmbConnectionPool::SmbConnectionPool(size_t maxConnections, CancelTasksExcept cancelTasksExcept)
+    : maxConnections_(maxConnections), cancelTasksExcept_(std::move(cancelTasksExcept)) {
     slots_.reserve(maxConnections);
     slots_.emplace_back(0);
 }
@@ -67,6 +68,7 @@ void SmbConnectionPool::tryAssignNext() {
 
         {
             std::unique_lock<std::mutex> lock(mutex_);
+            if (lifecycle_ != PoolLifecycle::Running) break;
             queue_.removeCancelledFromHead();
             req = queue_.takeNext();
             if (!req) break;
@@ -105,9 +107,10 @@ void SmbConnectionPool::tryAssignNext() {
 
             lock.lock();
 
-            if (!ok) {
+            if (!ok || lifecycle_ != PoolLifecycle::Running) {
                 SMB_LOG("Pool assign failed slot=%zu kind=%s taskId=%s", slotIdx, operationName(req->kind), req->taskId.c_str());
                 slot.resetBroken();
+                req->cancelled.store(true, std::memory_order_release);
                 req->fulfilled.store(true, std::memory_order_release);
                 try {
                     req->promise.set_value(PoolContextHandle{});
@@ -155,6 +158,9 @@ PoolContextHandle SmbConnectionPool::requestContext(AcquireMode mode, SmbOperato
     std::future<PoolContextHandle> fut;
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (lifecycle_ != PoolLifecycle::Running) {
+            throw std::runtime_error("SMB connection is closing or disconnected");
+        }
         req = queue_.enqueue(mode, kind, taskId);
         fut = req->promise.get_future();
     }
@@ -179,14 +185,17 @@ PoolContextHandle SmbConnectionPool::requestContext(AcquireMode mode, SmbOperato
 }
 
 void SmbConnectionPool::releaseContext(const PoolContextHandle& handle) {
+    bool shouldAssign = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (handle.valid()) {
+        if (handle.valid() && handle.slotIndex() < slots_.size()) {
             SMB_LOG("Pool release slot=%zu", handle.slotIndex());
             slots_[handle.slotIndex()].release();
         }
+        shouldAssign = lifecycle_ == PoolLifecycle::Running;
+        assignCv_.notify_all();
     }
-    tryAssignNext();
+    if (shouldAssign) tryAssignNext();
 }
 
 void SmbConnectionPool::cancelRequestsForTask(const std::string& taskId) {
@@ -215,67 +224,118 @@ std::vector<PoolSlotInfo> SmbConnectionPool::getPoolStatus() const {
     return out;
 }
 
-void SmbConnectionPool::initialize(const std::string& url, const SmbCredentials& credentials, const std::string& taskId) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    serverUrl_ = url;
-    credentials_ = std::make_shared<SmbCredentials>(credentials);
-    shareName_.clear();
-    primarySlot().manager()->initialize(url, credentials, taskId);
-    for (size_t i = 1; i < slots_.size(); ++i) {
-        if (slots_[i].isIdle() && slots_[i].manager()) slots_[i].manager()->disconnect();
+void SmbConnectionPool::drainCurrentWork(const std::string& excludeTaskId, const CancellationToken& cancel) {
+    if (cancel.cancelled()) throw std::runtime_error("connection transition cancelled");
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        lifecycle_ = PoolLifecycle::Closing;
+        queue_.cancelAll();
+        assignCv_.notify_all();
+    }
+    if (cancelTasksExcept_) cancelTasksExcept_(excludeTaskId);
+    std::unique_lock<std::mutex> lock(mutex_);
+    assignCv_.wait(lock, [&] {
+        for (const auto& slot : slots_) {
+            if (!slot.isIdle()) return false;
+        }
+        return true;
+    });
+}
+
+void SmbConnectionPool::disconnectAllSlots(const std::string& taskId) {
+    for (auto& slot : slots_) {
+        if (slot.manager()) slot.manager()->disconnect(taskId);
     }
 }
 
-void SmbConnectionPool::connect(const std::string& url, const SmbCredentials& credentials, const std::string& taskId) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    serverUrl_ = url;
-    credentials_ = std::make_shared<SmbCredentials>(credentials);
-    shareName_.clear();
-    if (url.size() > 6 && url.substr(0, 6) == "smb://") {
-        std::string remaining = url.substr(6);
-        const size_t slash = remaining.find('/');
-        if (slash != std::string::npos) shareName_ = remaining.substr(slash + 1);
-    }
-    primarySlot().manager()->connect(url, credentials, taskId);
-    for (size_t i = 1; i < slots_.size(); ++i) {
-        if (slots_[i].isIdle() && slots_[i].manager()) slots_[i].manager()->disconnect();
-    }
-}
-
-void SmbConnectionPool::connectShare(const std::string& share, const std::string& taskId) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    shareName_ = share;
-    primarySlot().manager()->connectShare(share, taskId);
-    for (size_t i = 1; i < slots_.size(); ++i) {
-        if (slots_[i].isIdle() && slots_[i].manager()) slots_[i].manager()->disconnect();
-    }
-}
-
-void SmbConnectionPool::disconnect(const std::string& taskId) {
-    std::lock_guard<std::mutex> lock(mutex_);
+void SmbConnectionPool::clearConfiguration() {
     serverUrl_.clear();
     shareName_.clear();
     credentials_.reset();
-    for (auto& slot : slots_) {
-        if (slot.isIdle() && slot.manager()) slot.manager()->disconnect(taskId);
+}
+
+void SmbConnectionPool::initialize(const std::string& url, const SmbCredentials& credentials, const std::string& taskId, const CancellationToken& cancel) {
+    std::lock_guard<std::mutex> transitionLock(lifecycleMutex_);
+    drainCurrentWork(taskId, cancel);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        disconnectAllSlots(taskId);
+        clearConfiguration();
+        serverUrl_ = url;
+        credentials_ = std::make_shared<SmbCredentials>(credentials);
+        primarySlot().manager()->initialize(url, credentials, taskId);
+        lifecycle_ = PoolLifecycle::Running;
+    } catch (...) {
+        disconnectAllSlots(taskId);
+        clearConfiguration();
+        lifecycle_ = PoolLifecycle::Disconnected;
+        throw;
     }
+}
+
+void SmbConnectionPool::connect(const std::string& url, const SmbCredentials& credentials, const std::string& taskId, const CancellationToken& cancel) {
+    std::lock_guard<std::mutex> transitionLock(lifecycleMutex_);
+    drainCurrentWork(taskId, cancel);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        disconnectAllSlots(taskId);
+        clearConfiguration();
+        serverUrl_ = url;
+        credentials_ = std::make_shared<SmbCredentials>(credentials);
+        if (url.size() > 6 && url.substr(0, 6) == "smb://") {
+            std::string remaining = url.substr(6);
+            const size_t slash = remaining.find('/');
+            if (slash != std::string::npos) shareName_ = remaining.substr(slash + 1);
+        }
+        primarySlot().manager()->connect(url, credentials, taskId);
+        lifecycle_ = PoolLifecycle::Running;
+    } catch (...) {
+        disconnectAllSlots(taskId);
+        clearConfiguration();
+        lifecycle_ = PoolLifecycle::Disconnected;
+        throw;
+    }
+}
+
+void SmbConnectionPool::connectShare(const std::string& share, const std::string& taskId, const CancellationToken& cancel) {
+    std::lock_guard<std::mutex> transitionLock(lifecycleMutex_);
+    drainCurrentWork(taskId, cancel);
+    std::lock_guard<std::mutex> lock(mutex_);
+    try {
+        primarySlot().manager()->connectShare(share, taskId);
+        for (size_t i = 1; i < slots_.size(); ++i) {
+            slots_[i].manager()->disconnect(taskId);
+        }
+        shareName_ = share;
+        lifecycle_ = PoolLifecycle::Running;
+    } catch (...) {
+        for (size_t i = 1; i < slots_.size(); ++i) {
+            slots_[i].manager()->disconnect(taskId);
+        }
+        shareName_.clear();
+        lifecycle_ = PoolLifecycle::Running;
+        throw;
+    }
+}
+
+void SmbConnectionPool::disconnect(const std::string& taskId, const CancellationToken& cancel) {
+    std::lock_guard<std::mutex> transitionLock(lifecycleMutex_);
+    drainCurrentWork(taskId, cancel);
+    std::lock_guard<std::mutex> lock(mutex_);
+    disconnectAllSlots(taskId);
+    clearConfiguration();
+    lifecycle_ = PoolLifecycle::Disconnected;
 }
 
 void SmbConnectionPool::resetPool() {
+    std::lock_guard<std::mutex> transitionLock(lifecycleMutex_);
+    drainCurrentWork("", {});
     std::lock_guard<std::mutex> lock(mutex_);
-    for (auto& slot : slots_) {
-        if (slot.manager()) {
-            try {
-                slot.manager()->disconnect();
-            } catch (...) {
-            }
-        }
-    }
+    disconnectAllSlots("");
     if (slots_.size() > 1) slots_.erase(slots_.begin() + 1, slots_.end());
     slots_[0].resetBroken();
-    serverUrl_.clear();
-    shareName_.clear();
-    credentials_.reset();
+    clearConfiguration();
+    lifecycle_ = PoolLifecycle::Disconnected;
 }
 
 std::vector<SmbShareList> SmbConnectionPool::listShares(const std::string& taskId) {

@@ -18,7 +18,7 @@ void DownloadFileOperator::run() {
     const CancellationToken token = cancelToken();
     handle.submitSync([&](smb2_context* ctx) {
         smbReadFileAsync(
-            ctx, remote, local, [this](double done, double total) { emitProgress(done, total); }, token);
+            ctx, handle.manager(), remote, local, [this](double done, double total) { emitProgress(done, total); }, token);
     });
 
     if (isCancelled()) {

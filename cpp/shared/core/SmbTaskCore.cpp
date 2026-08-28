@@ -23,7 +23,6 @@ SmbTaskCore::~SmbTaskCore() = default;
 
 void SmbTaskCore::cancel() {
     cancel_.cancel();
-    settle(SmbTaskStatus::Cancelled, "", static_cast<int>(SmbErrorCode::Cancelled));
 }
 
 SmbTaskState SmbTaskCore::getState() const {
@@ -176,7 +175,10 @@ void SmbTaskCore::notifyListeners() {
 }
 
 void SmbTaskCore::maybeSettle() {
-    if (cancel_.cancelled()) return;
+    if (cancel_.cancelled()) {
+        settle(SmbTaskStatus::Cancelled, "", static_cast<int>(SmbErrorCode::Cancelled));
+        return;
+    }
     const auto s = status_.load();
     // Running: normal IO ops. Idle: pool-direct ops (initialize/connect/listShares) that never
     // pass through OperatorBase::requestContext and therefore never call markPending/markRunning.

@@ -77,6 +77,22 @@ void ContextRequestQueue::cancelForTask(const std::string& taskId) {
     cancelIn(metadataPending_);
 }
 
+void ContextRequestQueue::cancelAll() {
+    auto cancelIn = [](std::deque<ContextRequestPtr>& queue) {
+        for (auto& req : queue) {
+            if (req->fulfilled.load(std::memory_order_acquire)) continue;
+            req->cancelled.store(true, std::memory_order_release);
+            req->fulfilled.store(true, std::memory_order_release);
+            try {
+                req->promise.set_value(PoolContextHandle{});
+            } catch (...) {
+            }
+        }
+    };
+    cancelIn(interactivePending_);
+    cancelIn(metadataPending_);
+}
+
 void ContextRequestQueue::removeCancelledFromHead() {
     drainCancelledFromHead(interactivePending_);
     drainCancelledFromHead(metadataPending_);

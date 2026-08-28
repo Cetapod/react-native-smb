@@ -26,6 +26,8 @@ class MetadataContextLease {
         return handle_.submitSync(std::forward<Fn>(fn));
     }
 
+    SmbConnectionManager& manager() const { return handle_.manager(); }
+
    private:
     PoolContextHandle handle_;
 };

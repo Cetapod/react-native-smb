@@ -16,6 +16,7 @@ namespace react_native_smb {
 void DeleteItemOperator::run() {
     const CancellationToken token = cancelToken();
     const std::string norm = path_util::normalized(path_);
+    if (norm.empty()) throw std::invalid_argument("Delete Failed: refusing to delete the share root");
     setSourceDestination(norm, "");
 
     bool isDirectory = false;

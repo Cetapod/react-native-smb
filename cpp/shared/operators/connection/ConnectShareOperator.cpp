@@ -5,7 +5,8 @@
 namespace react_native_smb {
 
 void ConnectShareOperator::run() {
-    pool().connectShare(share_);
+    pool().connectShare(share_, owningTaskId(), cancelToken());
+    if (isCancelled()) return;
     result_ = SmbConnectionInfo{
         pool().getCurrentUrl(),
         pool().getServerName(),

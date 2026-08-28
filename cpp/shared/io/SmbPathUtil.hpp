@@ -4,7 +4,10 @@
 #include <smb2/smb2.h>
 
 #include <cstdint>
+#include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "../ReactNativeSmb.hpp"  // SmbFileInfo
 
@@ -13,15 +16,54 @@ namespace react_native_smb {
 // Path and stat helpers shared by operators.
 namespace path_util {
 
-// Strip a single leading '/'; map "." / "/" / "" to empty (libsmb2 root form).
+// Normalize a remote path into libsmb2's root-relative form. SMB path case is
+// server-defined, so canonicalization intentionally does not change case.
 inline std::string normalized(const std::string& path) {
-    std::string p = path;
-    if (p == "." || p == "/" || p.empty()) {
-        p = "";
-    } else if (p[0] == '/') {
-        p = p.substr(1);
+    std::vector<std::string> components;
+    std::string component;
+
+    for (size_t i = 0; i <= path.size(); ++i) {
+        const char c = i < path.size() ? path[i] : '/';
+        if (c != '/' && c != '\\') {
+            component += c;
+            continue;
+        }
+        if (component.empty() || component == ".") {
+            component.clear();
+            continue;
+        }
+        if (component == "..") {
+            if (components.empty()) throw std::invalid_argument("SMB path escapes the share root");
+            components.pop_back();
+        } else {
+            components.push_back(std::move(component));
+        }
+        component.clear();
     }
-    return p;
+
+    std::string result;
+    for (const auto& part : components) {
+        if (!result.empty()) result += '/';
+        result += part;
+    }
+    return result;
+}
+
+inline bool isRoot(const std::string& path) {
+    return normalized(path).empty();
+}
+
+inline bool isDescendant(const std::string& ancestor, const std::string& candidate) {
+    const std::string base = normalized(ancestor);
+    const std::string path = normalized(candidate);
+    if (base.empty() || path.size() <= base.size() || path[base.size()] != '/') return false;
+    for (size_t i = 0; i < base.size(); ++i) {
+        const auto lowerAscii = [](char c) {
+            return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+        };
+        if (lowerAscii(base[i]) != lowerAscii(path[i])) return false;
+    }
+    return true;
 }
 
 // Join base + child with exactly one separator.

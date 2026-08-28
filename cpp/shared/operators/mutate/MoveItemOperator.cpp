@@ -14,6 +14,10 @@ void MoveItemOperator::run() {
 
     const std::string from = path_util::normalized(fromPath_);
     const std::string to = path_util::normalized(toPath_);
+    if (from.empty()) throw std::invalid_argument("Move Failed: refusing to move the share root");
+    if (path_util::isDescendant(from, to)) {
+        throw std::invalid_argument("Move Failed: destination cannot be inside the source directory");
+    }
 
     setSourceDestination(from, to);
 

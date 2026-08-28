@@ -5,7 +5,8 @@
 namespace react_native_smb {
 
 void DisconnectOperator::run() {
-    pool().disconnect();
+    pool().disconnect(owningTaskId(), cancelToken());
+    if (isCancelled()) return;
     emitStatus(SmbTaskStatus::Success);
 }
 

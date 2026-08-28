@@ -5,7 +5,8 @@
 namespace react_native_smb {
 
 void InitializeOperator::run() {
-    pool().initialize(url_, credentials_);
+    pool().initialize(url_, credentials_, owningTaskId(), cancelToken());
+    if (isCancelled()) return;
     emitStatus(SmbTaskStatus::Success);
 }
 

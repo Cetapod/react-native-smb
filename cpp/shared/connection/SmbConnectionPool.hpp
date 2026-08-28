@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../core/SmbEnums.hpp"
+#include "../core/CancellationToken.hpp"
 #include "ContextRequestQueue.hpp"
 #include "PoolContextHandle.hpp"
 #include "PoolSlot.hpp"
@@ -26,17 +27,18 @@ namespace react_native_smb {
  *   Op::requestContext → Interactive-first FIFO queue → exclusive slot assignment
  */
 class SmbConnectionPool {
-   public:
+    public:
     using PoolObserver = std::function<void(const std::vector<PoolSlotInfo>&)>;
+    using CancelTasksExcept = std::function<void(const std::string&)>;
 
-    explicit SmbConnectionPool(size_t maxConnections = 4);
+    explicit SmbConnectionPool(size_t maxConnections = 4, CancelTasksExcept cancelTasksExcept = {});
     ~SmbConnectionPool();
 
     // [connection control]
-    void initialize(const std::string& url, const SmbCredentials& credentials, const std::string& taskId = "");
-    void connect(const std::string& url, const SmbCredentials& credentials, const std::string& taskId = "");
-    void connectShare(const std::string& share, const std::string& taskId = "");
-    void disconnect(const std::string& taskId = "");
+    void initialize(const std::string& url, const SmbCredentials& credentials, const std::string& taskId = "", const CancellationToken& cancel = {});
+    void connect(const std::string& url, const SmbCredentials& credentials, const std::string& taskId = "", const CancellationToken& cancel = {});
+    void connectShare(const std::string& share, const std::string& taskId = "", const CancellationToken& cancel = {});
+    void disconnect(const std::string& taskId = "", const CancellationToken& cancel = {});
     void resetPool();
     std::vector<SmbShareList> listShares(const std::string& taskId = "");
 
@@ -68,11 +70,18 @@ class SmbConnectionPool {
     bool slotNeedsActivate(const PoolSlot& slot) const;
     PoolSlot& primarySlot();
     const PoolSlot& primarySlot() const;
+    void drainCurrentWork(const std::string& excludeTaskId, const CancellationToken& cancel);
+    void disconnectAllSlots(const std::string& taskId);
+    void clearConfiguration();
     mutable std::mutex mutex_;
+    std::mutex lifecycleMutex_;
     std::condition_variable assignCv_;
     std::vector<PoolSlot> slots_;
     size_t maxConnections_{4};
     ContextRequestQueue queue_;
+    enum class PoolLifecycle { Running, Closing, Disconnected };
+    PoolLifecycle lifecycle_{PoolLifecycle::Disconnected};
+    CancelTasksExcept cancelTasksExcept_;
 
     std::string serverUrl_;
     std::string shareName_;

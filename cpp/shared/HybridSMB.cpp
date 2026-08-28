@@ -37,7 +37,7 @@ using namespace margelo::nitro;
 
 template <typename OpT, typename R>
 std::shared_ptr<SmbTask> HybridSMB::createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp) {
-    auto task = std::make_shared<SmbTask>(taskId, std::move(seedOp), pool_.get());
+    auto task = std::make_shared<SmbTask>(taskId, std::move(seedOp), pool_);
 
     if (observer_) observer_->track(task);
     {
@@ -45,9 +45,36 @@ std::shared_ptr<SmbTask> HybridSMB::createTask(const std::string& taskId, std::u
         tasks_[taskId] = task;
     }
 
-    (void)Promise<void>::async([task]() {
-      task->start();
-    });
+    auto taskRuns = taskRuns_;
+    {
+        std::lock_guard<std::mutex> lock(taskRuns->mutex);
+        ++taskRuns->active;
+    }
+    const auto finishRun = [taskRuns] {
+        {
+            std::lock_guard<std::mutex> lock(taskRuns->mutex);
+            --taskRuns->active;
+        }
+        taskRuns->cv.notify_all();
+    };
+    try {
+        (void)Promise<void>::async([task, taskRuns] {
+            struct RunCompletionGuard {
+                std::shared_ptr<TaskRunState> state;
+                ~RunCompletionGuard() {
+                    {
+                        std::lock_guard<std::mutex> lock(state->mutex);
+                        --state->active;
+                    }
+                    state->cv.notify_all();
+                }
+            } guard{taskRuns};
+            task->start();
+        });
+    } catch (...) {
+        finishRun();
+        throw;
+    }
 
     return task;
 }
@@ -57,17 +84,35 @@ HybridSMB::HybridSMB() : HybridObject(NAME) {
     // to the same server/user/share. The pool reserves one slot for Interactive
     // callers (UI ops) so long Metadata fan-outs (parallel copy/delete/list) cannot
     // freeze the UI; see AcquireMode in PoolTypes.hpp.
-    pool_ = std::make_unique<SmbConnectionPool>(4);
+    pool_ = std::make_shared<SmbConnectionPool>(4, [this](const std::string& taskId) { cancelAllTasksExcept(taskId); });
     observer_ = std::make_unique<TaskObserverHub>();
 }
 
-HybridSMB::~HybridSMB() { pool_->disconnect(); }
+HybridSMB::~HybridSMB() {
+    try {
+        pool_->disconnect();
+    } catch (...) {
+    }
+    std::unique_lock<std::mutex> lock(taskRuns_->mutex);
+    taskRuns_->cv.wait(lock, [&] { return taskRuns_->active == 0; });
+}
+
+void HybridSMB::cancelAllTasksExcept(const std::string& taskId) {
+    std::vector<std::shared_ptr<SmbTask>> tasks;
+    {
+        std::lock_guard<std::mutex> lock(tasksMutex_);
+        for (const auto& [id, task] : tasks_) {
+            if (id != taskId) tasks.push_back(task);
+        }
+    }
+    for (const auto& task : tasks) task->cancel();
+}
 
 // --- State Checks ---
 
-bool HybridSMB::isConnected() { return pool_ && pool_->isConnected(); }
+bool HybridSMB::isConnected() { return pool_->isConnected(); }
 
-bool HybridSMB::isInitialized() { return pool_ && pool_->isInitialized(); }
+bool HybridSMB::isInitialized() { return pool_->isInitialized(); }
 
 // --- Connection Management ---
 

@@ -12,6 +12,7 @@
 #include <NitroModules/HybridObject.hpp>
 #include <NitroModules/Promise.hpp>
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
@@ -27,13 +28,21 @@ using namespace margelo::nitro;
 
 class HybridSMB : public ReactNativeSmb {
    private:
-    std::unique_ptr<SmbConnectionPool> pool_;
+    std::shared_ptr<SmbConnectionPool> pool_;
     // Optional observer; tracks every task this instance creates.
     std::unique_ptr<TaskObserverHub> observer_;
 
     // Live tasks, kept only so cancelTask/getTask can locate them.
     std::map<std::string, std::shared_ptr<SmbTask>> tasks_;
     std::mutex tasksMutex_;
+    struct TaskRunState {
+        std::mutex mutex;
+        std::condition_variable cv;
+        size_t active{0};
+    };
+    std::shared_ptr<TaskRunState> taskRuns_{std::make_shared<TaskRunState>()};
+
+    void cancelAllTasksExcept(const std::string& taskId);
 
     using PoolListener = std::function<void(const std::vector<std::unordered_map<std::string, std::string>>&)>;
     std::map<std::string, PoolListener> poolListeners_;

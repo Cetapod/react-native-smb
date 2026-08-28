@@ -23,7 +23,7 @@ using namespace margelo::nitro;
 
 class SmbTask : public HybridObject, public SmbTaskCore {
    public:
-    SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, SmbConnectionPool* pool);
+    SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool);
     ~SmbTask();
 
     void start();
@@ -41,7 +41,7 @@ class SmbTask : public HybridObject, public SmbTaskCore {
 
    private:
     jsi::Value getResultValueRaw(jsi::Runtime& runtime, const jsi::Value& thisValue, const jsi::Value* args, size_t count);
-    SmbConnectionPool* pool_{nullptr};
+    std::weak_ptr<SmbConnectionPool> pool_;
 
     void launchOp(size_t opIndex);
     size_t appendOps(std::vector<std::unique_ptr<OperatorBase>>& more);

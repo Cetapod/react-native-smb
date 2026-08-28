@@ -15,6 +15,7 @@ class ContextRequestQueue {
     void requeueFront(ContextRequestPtr req);
     void removeCancelledFromHead();
     void cancelForTask(const std::string& taskId);
+    void cancelAll();
 
    private:
     size_t pendingCount() const;

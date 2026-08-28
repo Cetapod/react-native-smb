@@ -14,7 +14,7 @@ namespace react_native_smb {
 namespace jsi = facebook::jsi;
 using namespace margelo::nitro;
 
-SmbTask::SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, SmbConnectionPool* pool)
+SmbTask::SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool)
     : HybridObject("SmbTask"),
       SmbTaskCore(std::move(id), seedOp->kind()),
       pool_(pool) {
@@ -27,7 +27,7 @@ SmbTask::~SmbTask() = default;
 
 void SmbTask::cancel() {
     SMB_LOG("Task cancel id=%s", getId().c_str());
-    if (pool_) pool_->cancelRequestsForTask(getId());
+    if (auto pool = pool_.lock()) pool->cancelRequestsForTask(getId());
     SmbTaskCore::cancel();
 }
 
@@ -58,8 +58,13 @@ void SmbTask::launchOp(size_t opIndex) {
             self->onOpFinished();
             return;
         }
+        auto pool = self->pool_.lock();
+        if (!pool) {
+            self->onOpFinished();
+            return;
+        }
         try {
-            op->start(self.get(), self->pool_, self->cancel_, opIndex);
+            op->start(self.get(), pool.get(), self->cancel_, opIndex);
         } catch (const std::exception& e) {
             if (!self->cancel_.cancelled()) {
                 const int code = SmbErrorMapper::fromErrnoOrMessage(0, e.what());
