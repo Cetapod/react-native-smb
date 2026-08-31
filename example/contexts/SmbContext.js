@@ -16,6 +16,7 @@ export const SmbProvider = ({ children }) => {
   const [smb, setSmb] = useState(null);
   const [moduleError, setModuleError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   useEffect(() => {
     try {
@@ -219,10 +220,13 @@ export const SmbProvider = ({ children }) => {
   );
 
   const handleBackToLogin = useCallback(async () => {
-    if (smb) {
-      try {
-        await smb.disconnect().result();
-      } catch {}
+    if (!smb) return;
+    setIsDisconnecting(true);
+    try {
+      await smb.disconnect().result();
+    } catch {
+    } finally {
+      setIsDisconnecting(false);
     }
     lastCredsRef.current = null;
     setCurrentScreen('login');
@@ -245,6 +249,7 @@ export const SmbProvider = ({ children }) => {
       smb,
       moduleError,
       isLoading,
+      isDisconnecting,
       setIsLoading,
       alertConfig,
       showAlert,
@@ -267,7 +272,7 @@ export const SmbProvider = ({ children }) => {
       prefs,
       updatePrefs,
     }),
-    [smb, moduleError, isLoading, setIsLoading, alertConfig, showAlert, showPrompt, hideAlert, currentScreen, sharesList, selectedShare, currentUsername, filesList, currentPath, loadFiles, loadShares, handleLogin, handleSelectShare, handleBackToLogin, handleBackToShares, ensureConnected, prefs, updatePrefs],
+    [smb, moduleError, isLoading, isDisconnecting, setIsLoading, alertConfig, showAlert, showPrompt, hideAlert, currentScreen, sharesList, selectedShare, currentUsername, filesList, currentPath, loadFiles, loadShares, handleLogin, handleSelectShare, handleBackToLogin, handleBackToShares, ensureConnected, prefs, updatePrefs],
   );
 
   return <SmbContext.Provider value={value}>{children}</SmbContext.Provider>;

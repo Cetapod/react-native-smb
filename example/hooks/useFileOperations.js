@@ -166,21 +166,43 @@ export const useFileOperations = (SMB, currentPath, loadFiles, setIsLoading, sho
     }
   };
 
+  const downloadFiles = async (files, opts = {}) => {
+    const { autoShare = false } = opts;
+    const fileItems = (files || []).filter((f) => !f.isDirectory);
+    if (fileItems.length === 0) return;
+
+    const tasks = fileItems.map((file) => {
+      const remotePath = buildFilePath(currentPath, file.name);
+      const localFilePath = buildFilePath(Paths.cache.uri, file.name);
+      return SMB.downloadFile(remotePath, localFilePath);
+    });
+
+    void (async () => {
+      const results = await SmbTask.settleAll(tasks);
+      for (let index = 0; index < results.length; index++) {
+        const result = results[index];
+        const file = fileItems[index];
+        if (result.status === 'rejected') {
+          showAlert('Download Failed', result.reason?.message || `Download failed for ${file?.name}`);
+          continue;
+        }
+        if (autoShare) {
+          const localFilePath = buildFilePath(Paths.cache.uri, file.name);
+          try {
+            if (await Sharing.isAvailableAsync()) {
+              await Sharing.shareAsync(localFilePath);
+            }
+          } catch (shareErr) {
+            console.warn('shareAsync failed:', shareErr);
+          }
+        }
+      }
+    })();
+  };
+
   const duplicateFiles = async (files) => {
     if (!files || files.length === 0) return;
-    let existing = [];
-    try {
-      const list = await SMB.listDirectory(currentPath, false, -1).result();
-      existing = (list || []).map((f) => f.name);
-    } catch {}
-    const reserved = new Set();
-    const tasks = files.map((file) => {
-      const targetName = generateUniqueName(file.name, existing, reserved);
-      reserved.add(targetName);
-      const fromPath = buildFilePath(currentPath, file.name);
-      const toPath = buildFilePath(currentPath, targetName);
-      return SMB.copyItem(fromPath, toPath, !!file.isDirectory);
-    });
+    const tasks = files.map((file) => SMB.duplicateItem(buildFilePath(currentPath, file.name)));
 
     void (async () => {
       const results = await SmbTask.settleAll(tasks);
@@ -235,6 +257,7 @@ export const useFileOperations = (SMB, currentPath, loadFiles, setIsLoading, sho
 
   return {
     downloadFile,
+    downloadFiles,
     uploadFile,
     deleteFile,
     deleteFiles,

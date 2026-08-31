@@ -2,9 +2,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
+import { View } from 'react-native';
 
 import AclViewModal from './components/AclViewModal';
 import CustomAlert from './components/CustomAlert';
+import DisconnectOverlay from './components/DisconnectOverlay';
 import FileActionModal from './components/FileActionModal';
 import FileInfoModal from './components/FileInfoModal';
 import FileOperationModal from './components/FileOperationModal';
@@ -164,7 +166,7 @@ const AppShell = () => {
   }
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <StatusBar style="auto" />
       {renderScreen()}
 
@@ -221,10 +223,12 @@ const AppShell = () => {
         onInputSubmit={smb.alertConfig.onInputSubmit}
       />
 
+      <DisconnectOverlay visible={smb.isDisconnecting} />
+
       {__DEV__ && <PoolDebugPanel />}
       <TaskSnapshotBar task={trackedDownloadTask} />
       <TransferTrayPanel />
-    </>
+    </View>
   );
 };
 
