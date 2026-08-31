@@ -64,6 +64,8 @@ class SmbConnectionPool {
     void removeObserver(size_t id);
 
    private:
+    enum class PoolLifecycle { Running, Closing, Disconnected };
+
     void tryAssignNext();
     size_t findIdleSlot(AcquireMode mode) const;
     size_t maybeGrowSlot();
@@ -73,13 +75,13 @@ class SmbConnectionPool {
     void drainCurrentWork(const std::string& excludeTaskId, const CancellationToken& cancel);
     void disconnectAllSlots(const std::string& taskId);
     void clearConfiguration();
+    void notifyObservers();
     mutable std::mutex mutex_;
     std::mutex lifecycleMutex_;
     std::condition_variable assignCv_;
     std::vector<PoolSlot> slots_;
     size_t maxConnections_{4};
     ContextRequestQueue queue_;
-    enum class PoolLifecycle { Running, Closing, Disconnected };
     PoolLifecycle lifecycle_{PoolLifecycle::Disconnected};
     CancelTasksExcept cancelTasksExcept_;
 

@@ -2,6 +2,7 @@
 
 #include "ReactNativeSmb.hpp"
 #include "connection/SmbConnectionPool.hpp"
+#include "core/LifecycleSerialExecutor.hpp"
 #include "core/SmbTask.hpp"
 #include "core/TaskObserverHub.hpp"
 #include "operators/OperatorBase.hpp"
@@ -41,8 +42,10 @@ class HybridSMB : public ReactNativeSmb {
         size_t active{0};
     };
     std::shared_ptr<TaskRunState> taskRuns_{std::make_shared<TaskRunState>()};
+    LifecycleSerialExecutor lifecycleExecutor_;
 
     void cancelAllTasksExcept(const std::string& taskId);
+    static void releaseTaskRun(const std::shared_ptr<TaskRunState>& state);
 
     using PoolListener = std::function<void(const std::vector<std::unordered_map<std::string, std::string>>&)>;
     std::map<std::string, PoolListener> poolListeners_;
@@ -50,9 +53,13 @@ class HybridSMB : public ReactNativeSmb {
     std::mutex poolListenersMutex_;
     std::atomic<size_t> poolListenerToken_{1};
 
+    // Shared = Nitro Promise::async (general tasks). Lifecycle = dedicated FIFO worker
+    // for connection transitions so logout/reconnect is not queued behind bulk work.
+    enum class ExecutionLane { Shared, Lifecycle };
+
     // SmbTask factory
-    template <typename OpT, typename R>
-    std::shared_ptr<SmbTask> createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp);
+    template <typename OpT>
+    std::shared_ptr<SmbTask> createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp, ExecutionLane lane = ExecutionLane::Shared);
 
 
    public:

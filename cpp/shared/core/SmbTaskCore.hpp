@@ -33,6 +33,7 @@ class SmbTaskCore {
     SmbTaskState getState() const;
     std::string getId() const { return id_; }
     SmbTaskStatus getStatus() const { return status_.load(); }
+    bool isSettled() const { return settled_.load(std::memory_order_acquire); }
     CancellationToken token() const { return cancel_; }
 
     void setPaths(std::string source, std::string destination);

@@ -12,8 +12,6 @@
 
 #include "connection/PoolTypes.hpp"
 #include "util/SmbErrorMapper.hpp"
-#include "util/SmbLog.hpp"
-#include "core/SmbEnums.hpp"
 #include "core/TaskSnapshotCodec.hpp"
 #include "operators/connection/ConnectOperator.hpp"
 #include "operators/connection/ConnectShareOperator.hpp"
@@ -35,8 +33,16 @@
 namespace react_native_smb {
 using namespace margelo::nitro;
 
-template <typename OpT, typename R>
-std::shared_ptr<SmbTask> HybridSMB::createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp) {
+void HybridSMB::releaseTaskRun(const std::shared_ptr<TaskRunState>& state) {
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        --state->active;
+    }
+    state->cv.notify_all();
+}
+
+template <typename OpT>
+std::shared_ptr<SmbTask> HybridSMB::createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp, ExecutionLane lane) {
     auto task = std::make_shared<SmbTask>(taskId, std::move(seedOp), pool_);
 
     if (observer_) observer_->track(task);
@@ -50,29 +56,23 @@ std::shared_ptr<SmbTask> HybridSMB::createTask(const std::string& taskId, std::u
         std::lock_guard<std::mutex> lock(taskRuns->mutex);
         ++taskRuns->active;
     }
-    const auto finishRun = [taskRuns] {
-        {
-            std::lock_guard<std::mutex> lock(taskRuns->mutex);
-            --taskRuns->active;
-        }
-        taskRuns->cv.notify_all();
+
+    auto runBody = [task, taskRuns] {
+        struct RunCompletionGuard {
+            std::shared_ptr<TaskRunState> state;
+            ~RunCompletionGuard() { HybridSMB::releaseTaskRun(state); }
+        } guard{taskRuns};
+        task->start();
     };
+
     try {
-        (void)Promise<void>::async([task, taskRuns] {
-            struct RunCompletionGuard {
-                std::shared_ptr<TaskRunState> state;
-                ~RunCompletionGuard() {
-                    {
-                        std::lock_guard<std::mutex> lock(state->mutex);
-                        --state->active;
-                    }
-                    state->cv.notify_all();
-                }
-            } guard{taskRuns};
-            task->start();
-        });
+        if (lane == ExecutionLane::Lifecycle) {
+            lifecycleExecutor_.post(std::move(runBody));
+        } else {
+            (void)Promise<void>::async(std::move(runBody));
+        }
     } catch (...) {
-        finishRun();
+        releaseTaskRun(taskRuns);
         throw;
     }
 
@@ -95,17 +95,21 @@ HybridSMB::~HybridSMB() {
     }
     std::unique_lock<std::mutex> lock(taskRuns_->mutex);
     taskRuns_->cv.wait(lock, [&] { return taskRuns_->active == 0; });
+    lock.unlock();
+    lifecycleExecutor_.shutdown();
 }
 
 void HybridSMB::cancelAllTasksExcept(const std::string& taskId) {
-    std::vector<std::shared_ptr<SmbTask>> tasks;
+    std::vector<std::shared_ptr<SmbTask>> toCancel;
+    toCancel.reserve(tasks_.size());
     {
         std::lock_guard<std::mutex> lock(tasksMutex_);
         for (const auto& [id, task] : tasks_) {
-            if (id != taskId) tasks.push_back(task);
+            if (id == taskId || task->isSettled()) continue;
+            toCancel.push_back(task);
         }
     }
-    for (const auto& task : tasks) task->cancel();
+    for (const auto& task : toCancel) task->cancel();
 }
 
 // --- State Checks ---
@@ -117,73 +121,73 @@ bool HybridSMB::isInitialized() { return pool_->isInitialized(); }
 // --- Connection Management ---
 
 std::shared_ptr<SmbTask> HybridSMB::initialize(const std::string& taskId, const std::string& url, const SmbCredentials& credentials) {
-    return createTask<InitializeOperator, void>(taskId, std::make_unique<InitializeOperator>(url, credentials));
+    return createTask<InitializeOperator>(taskId, std::make_unique<InitializeOperator>(url, credentials), ExecutionLane::Lifecycle);
 }
 
 std::shared_ptr<SmbTask> HybridSMB::connect(const std::string& taskId, const std::string& url, const SmbCredentials& credentials) {
-    return createTask<ConnectOperator, SmbConnectionInfo>(taskId, std::make_unique<ConnectOperator>(url, credentials));
+    return createTask<ConnectOperator>(taskId, std::make_unique<ConnectOperator>(url, credentials), ExecutionLane::Lifecycle);
 }
 
 std::shared_ptr<SmbTask> HybridSMB::disconnect(const std::string& taskId) {
-    return createTask<DisconnectOperator, void>(taskId, std::make_unique<DisconnectOperator>());
+    return createTask<DisconnectOperator>(taskId, std::make_unique<DisconnectOperator>(), ExecutionLane::Lifecycle);
 }
 
 std::shared_ptr<SmbTask> HybridSMB::listShares(const std::string& taskId) {
-    return createTask<ListSharesOperator, std::vector<SmbShareList>>(taskId, std::make_unique<ListSharesOperator>());
+    return createTask<ListSharesOperator>(taskId, std::make_unique<ListSharesOperator>());
 }
 
 std::shared_ptr<SmbTask> HybridSMB::connectShare(const std::string& taskId, const std::string& share) {
-    return createTask<ConnectShareOperator, SmbConnectionInfo>(taskId, std::make_unique<ConnectShareOperator>(share));
+    return createTask<ConnectShareOperator>(taskId, std::make_unique<ConnectShareOperator>(share), ExecutionLane::Lifecycle);
 }
 
 // --- Listing & Info ---
 
 std::shared_ptr<SmbTask> HybridSMB::listDirectory(const std::string& taskId, const std::string& path, bool recursive, int maxDepth, bool includeSecurityDescriptor) {
-    return createTask<ListDirectoryOperator, std::vector<SmbFileInfo>>(taskId, std::make_unique<ListDirectoryOperator>(path, recursive, maxDepth, includeSecurityDescriptor));
+    return createTask<ListDirectoryOperator>(taskId, std::make_unique<ListDirectoryOperator>(path, recursive, maxDepth, includeSecurityDescriptor));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::getPathInfo(const std::string& taskId, const std::string& path) {
-    return createTask<GetPathInfoOperator, SmbFileInfo>(taskId, std::make_unique<GetPathInfoOperator>(path));
+    return createTask<GetPathInfoOperator>(taskId, std::make_unique<GetPathInfoOperator>(path));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::getSecurityDescriptor(const std::string& taskId, const std::string& path) {
-    return createTask<GetSecurityDescriptorOperator, SmbSecurityDescriptor>(taskId, std::make_unique<GetSecurityDescriptorOperator>(path));
+    return createTask<GetSecurityDescriptorOperator>(taskId, std::make_unique<GetSecurityDescriptorOperator>(path));
 }
 
 // --- File Transfers ---
 
 std::shared_ptr<SmbTask> HybridSMB::downloadFile(const std::string& taskId, const std::string& remotePath, const std::string& localPath) {
-    return createTask<DownloadFileOperator, void>(taskId, std::make_unique<DownloadFileOperator>(remotePath, localPath));
+    return createTask<DownloadFileOperator>(taskId, std::make_unique<DownloadFileOperator>(remotePath, localPath));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::uploadFile(const std::string& taskId, const std::string& localPath, const std::string& remotePath) {
-    return createTask<UploadFileOperator, void>(taskId, std::make_unique<UploadFileOperator>(localPath, remotePath));
+    return createTask<UploadFileOperator>(taskId, std::make_unique<UploadFileOperator>(localPath, remotePath));
 }
 
 // --- Mutating File Operations ---
 
 std::shared_ptr<SmbTask> HybridSMB::createDirectory(const std::string& taskId, const std::string& path)  {
-    return createTask<CreateDirectoryOperator, void>(taskId, std::make_unique<CreateDirectoryOperator>(path));
+    return createTask<CreateDirectoryOperator>(taskId, std::make_unique<CreateDirectoryOperator>(path));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::deleteItem(const std::string& taskId, const std::string& path) {
-    return createTask<DeleteItemOperator, void>(taskId, std::make_unique<DeleteItemOperator>(path));
+    return createTask<DeleteItemOperator>(taskId, std::make_unique<DeleteItemOperator>(path));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::moveItem(const std::string& taskId, const std::string& fromPath, const std::string& toPath) {
-    return createTask<MoveItemOperator, void>(taskId, std::make_unique<MoveItemOperator>(fromPath, toPath));
+    return createTask<MoveItemOperator>(taskId, std::make_unique<MoveItemOperator>(fromPath, toPath));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::renameItem(const std::string& taskId, const std::string& currentPath, const std::string& newName) {
-    return createTask<RenameItemOperator, void>(taskId, std::make_unique<RenameItemOperator>(currentPath, newName));
+    return createTask<RenameItemOperator>(taskId, std::make_unique<RenameItemOperator>(currentPath, newName));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::copyItem(const std::string& taskId, const std::string& fromPath, const std::string& toPath, bool recursive) {
-    return createTask<CopyItemOperator, void>(taskId, std::make_unique<CopyItemOperator>(fromPath, toPath, recursive));
+    return createTask<CopyItemOperator>(taskId, std::make_unique<CopyItemOperator>(fromPath, toPath, recursive));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::duplicateItem(const std::string& taskId, const std::string& path) {
-    return createTask<DuplicateItemOperator, std::string>(taskId, std::make_unique<DuplicateItemOperator>(path));
+    return createTask<DuplicateItemOperator>(taskId, std::make_unique<DuplicateItemOperator>(path));
 }
 
 void HybridSMB::cancelTask(const std::string& taskId) {
