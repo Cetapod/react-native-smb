@@ -109,7 +109,12 @@ class ReactNativeSmb : public virtual HybridObject {
     virtual std::vector<std::unordered_map<std::string, std::string>> getActiveTasks() = 0;
     virtual std::vector<std::unordered_map<std::string, std::string>> getTaskHistory(int limit, int offset) = 0;
     virtual void cancelTask(const std::string& taskId) = 0;
+    // Cancels unsettled download/upload/copy/duplicate tasks only.
+    virtual void cancelTransferTasks() = 0;
     virtual void clearTaskHistory(int64_t beforeTs) = 0;
+
+    // Tear down the client (cancel tasks, disconnect pool, wait workers). Not reusable.
+    virtual std::shared_ptr<margelo::nitro::Promise<void>> destroy() = 0;
 
     // Debug / instrumentation
     virtual std::string subscribePoolInfo(const std::function<void(const std::vector<std::unordered_map<std::string, std::string>>&)>& listener) = 0;

@@ -134,7 +134,11 @@ class SmbErrorMapper {
             return static_cast<int>(SmbErrorCode::DirectoryNotEmpty);
         }
 
-        if (containsAny(upper, {"STATUS_CONNECTION_DISCONNECTED", "STATUS_NETWORK_NAME_DELETED", "BROKEN PIPE"})) {
+        if (containsAny(upper, {"CANCELLED", "CANCELED", "CONTEXT REQUEST CANCELLED", "CONNECTION TRANSITION CANCELLED"})) {
+            return static_cast<int>(SmbErrorCode::Cancelled);
+        }
+
+        if (containsAny(upper, {"STATUS_CONNECTION_DISCONNECTED", "STATUS_NETWORK_NAME_DELETED", "BROKEN PIPE", "CLOSING OR DISCONNECTED", "CONTEXT REQUEST FAILED"})) {
             return static_cast<int>(SmbErrorCode::NotConnected);
         }
 

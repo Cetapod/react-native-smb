@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "../core/SmbEnums.hpp"
@@ -82,6 +83,9 @@ class SmbConnectionPool {
     std::vector<PoolSlot> slots_;
     size_t maxConnections_{4};
     ContextRequestQueue queue_;
+    // Requests currently outside the queue while a slot is being activated.
+    // cancelRequestsForTask must see these so cancellation cannot race past takeNext().
+    std::unordered_map<uint64_t, ContextRequestPtr> activating_;
     PoolLifecycle lifecycle_{PoolLifecycle::Disconnected};
     CancelTasksExcept cancelTasksExcept_;
 

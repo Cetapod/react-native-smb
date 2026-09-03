@@ -140,10 +140,18 @@ try {
 
 ## Lifecycle
 
-When you're done with a client instance (e.g. user logs out), call `dispose()` to stop the transfer store listener:
+To stop transfer tray subscriptions without tearing down the SMB session:
 
 ```typescript
-smb.dispose();
+smb.transferStore().stop();
 ```
+
+When you're done with a client instance (e.g. user logs out), shut it down completely:
+
+```typescript
+await smb.destroy();
+```
+
+Create a new client with `SMB()` afterwards — the instance is not reusable.
 
 Sync state checks (`isConnected`, `isInitialized`) are available anytime without a task.

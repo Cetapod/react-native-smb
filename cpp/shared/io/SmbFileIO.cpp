@@ -7,21 +7,23 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstdio>
-#include <fstream>
+#include <cstring>
 #include <stdexcept>
 #include <utility>
 
 #include "../connection/SmbConnection.hpp"
 #include "../core/CancellationToken.hpp"
 #include "../util/SmbErrorMapper.hpp"
+#include "../util/SmbException.hpp"
 #include "../util/SmbLog.hpp"
+#include "SmbPathUtil.hpp"
 
 namespace react_native_smb {
 
 // Progress coalescing: emit only when >=256 KiB or >=0.5% have elapsed since
-// the last emission. Declared here so both the legacy sync path and the
-// async pipelined paths can use it.
+// the last emission.
 static constexpr int64_t kProgressMinBytes = 256 * 1024;  // 256 KiB
 static constexpr double kProgressMinFraction = 0.005;     // 0.5%
 
@@ -49,303 +51,22 @@ inline uint32_t capAsyncChunkSize(uint32_t negotiatedSize) {
     return std::min(negotiatedSize, kAsyncChunkSizeCap);
 }
 
-int64_t smbReadFile(void* ctxVoid, const std::string& remotePath, const std::string& localPath, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
-    smb2_context* ctx = static_cast<smb2_context*>(ctxVoid);
-
-    smb2fh* fh = smb2_open(ctx, remotePath.c_str(), O_RDONLY);
-    if (!fh) {
-        std::string error = smb2_get_error(ctx);
-        std::string msg = "Download Failed: Could not open remote file for reading: " + remotePath + ". Error: " + error;
-        throw std::runtime_error(msg);
+SmbErrorCode mapSmbResult(int result, const std::string& message) {
+    int mapped = SmbErrorMapper::fromErrnoResult(result);
+    if (mapped == static_cast<int>(SmbErrorCode::Unknown)) {
+        mapped = SmbErrorMapper::fromErrnoOrMessage(0, message);
     }
-
-    struct smb2_stat_64 stat;
-    const int fstatResult = smb2_fstat(ctx, fh, &stat);
-    if (fstatResult < 0) {
-        smb2_close(ctx, fh);
-        std::string error = smb2_get_error(ctx);
-        std::string msg = "Download Failed: Could not get stats for file: " + remotePath + ". Error: " + error;
-        throw std::runtime_error(msg);
+    if (mapped == static_cast<int>(SmbErrorCode::Unknown)) {
+        mapped = static_cast<int>(SmbErrorCode::Io);
     }
-
-    int64_t fileSize = static_cast<int64_t>(stat.smb2_size);
-    int64_t totalBytesRead = 0;
-
-    std::ofstream localFile(localPath, std::ios::binary | std::ios::trunc);
-    if (!localFile.is_open()) {
-        smb2_close(ctx, fh);
-        std::string msg = "Download Failed: Could not create local file at: " + localPath + ". Check permissions.";
-        throw std::runtime_error(msg);
-    }
-
-    auto cleanup = [&]() {
-        localFile.close();
-        smb2_close(ctx, fh);
-    };
-
-    try {
-        constexpr size_t BUFFER_SIZE = 1024 * 1024;
-        std::vector<uint8_t> buffer(BUFFER_SIZE);
-        ssize_t bytesRead;
-
-        if (fileSize > 0) {
-            if (progressHandler) {
-                progressHandler(0.0, static_cast<double>(fileSize));
-            }
-
-            int64_t lastEmittedDl = 0;
-            while ((bytesRead = smb2_read(ctx, fh, buffer.data(), BUFFER_SIZE)) > 0) {
-                // Check for cancellation
-                if (cancel.cancelled()) {
-                    cleanup();
-                    std::remove(localPath.c_str());
-                    return 0;
-                }
-
-                localFile.write(reinterpret_cast<const char*>(buffer.data()), bytesRead);
-                if (localFile.fail()) {
-                    std::string msg = "Failed to write to local file '" + localPath + "'";
-                    throw std::runtime_error(msg);
-                }
-
-                totalBytesRead += bytesRead;
-
-                if (progressHandler && shouldEmitProgress(totalBytesRead, fileSize, lastEmittedDl)) {
-                    progressHandler(static_cast<double>(totalBytesRead), static_cast<double>(fileSize));
-                }
-
-                if (totalBytesRead > fileSize) {
-                    std::string msg = "Read more bytes than expected file size";
-                    throw std::runtime_error(msg);
-                }
-            }
-
-            if (bytesRead < 0) {
-                std::string error = smb2_get_error(ctx);
-                std::string msg = "Failed to read from remote file '" + remotePath + "': " + error;
-                throw std::runtime_error(msg);
-            }
-
-            localFile.flush();
-            if (localFile.fail()) {
-                std::string msg = "Failed to flush data to local file '" + localPath + "'";
-                throw std::runtime_error(msg);
-            }
-        }
-
-        if (totalBytesRead != fileSize) {
-            std::string msg = "Downloaded file size mismatch. Expected: " + std::to_string(fileSize) + ", Got: " + std::to_string(totalBytesRead);
-            throw std::runtime_error(msg);
-        }
-
-        cleanup();
-
-        if (progressHandler) {
-            progressHandler(static_cast<double>(fileSize), static_cast<double>(fileSize));
-        }
-    } catch (const std::exception& e) {
-        cleanup();
-        try {
-            std::remove(localPath.c_str());
-        } catch (const std::exception& removeError) {
-            // Failed to remove incomplete file, ignoring to preserve original error
-        }
-        throw;
-    }
-
-    return totalBytesRead;
+    return static_cast<SmbErrorCode>(mapped);
 }
 
-int64_t smbWriteFile(void* ctxVoid, const std::string& localPath, const std::string& remotePath, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
-    smb2_context* ctx = static_cast<smb2_context*>(ctxVoid);
-
-    std::ifstream localFile(localPath, std::ios::binary | std::ios::ate);
-    if (!localFile.is_open()) {
-        std::string msg = "Upload Failed: Could not open local file for reading: " + localPath;
-        throw std::runtime_error(msg);
-    }
-
-    std::streamsize localFileSize = localFile.tellg();
-    localFile.seekg(0, std::ios::beg);
-
-    if (localFileSize < 0) {
-        std::string msg = "Upload Failed: Could not determine size of local file: " + localPath;
-        throw std::runtime_error(msg);
-    }
-
-    smb2fh* fh = smb2_open(ctx, remotePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
-    if (!fh) {
-        std::string error = smb2_get_error(ctx);
-        std::string msg = "Upload Failed: Could not create remote file: " + remotePath + ". Error: " + error;
-        throw std::runtime_error(msg);
-    }
-
-    auto cleanup = [&]() {
-        localFile.close();
-        smb2_close(ctx, fh);
-    };
-
-    try {
-        constexpr size_t BUFFER_SIZE = 1024 * 1024;
-        std::vector<uint8_t> buffer(BUFFER_SIZE);
-        int64_t totalBytesWritten = 0;
-
-        if (progressHandler) {
-            progressHandler(0.0, static_cast<double>(localFileSize));
-        }
-
-        while (localFile.read(reinterpret_cast<char*>(buffer.data()), BUFFER_SIZE) || localFile.gcount() > 0) {
-            // Check for cancellation
-            if (cancel.cancelled()) {
-                cleanup();
-                smb2_unlink(ctx, remotePath.c_str());
-                return 0;
-            }
-
-            auto bytesToWrite = static_cast<uint32_t>(localFile.gcount());
-            if (localFile.bad()) {
-                std::string msg = "Error reading from local file '" + localPath + "'";
-                throw std::runtime_error(msg);
-            }
-
-            ssize_t bytesWritten = smb2_write(ctx, fh, buffer.data(), bytesToWrite);
-            if (bytesWritten < 0) {
-                std::string error = smb2_get_error(ctx);
-                std::string msg = "Failed to write to remote file '" + remotePath + "': " + error;
-                throw std::runtime_error(msg);
-            }
-
-            if (static_cast<uint32_t>(bytesWritten) != bytesToWrite) {
-                std::string msg = "Incomplete write to remote file '" + remotePath + "'";
-                throw std::runtime_error(msg);
-            }
-
-            totalBytesWritten += bytesWritten;
-
-            if (progressHandler) {
-                progressHandler(static_cast<double>(totalBytesWritten), static_cast<double>(localFileSize));
-            }
-
-            if (totalBytesWritten > localFileSize) {
-                std::string msg = "Written more bytes than local file size";
-                throw std::runtime_error(msg);
-            }
-        }
-
-        if (smb2_fsync(ctx, fh) < 0) {
-        }
-
-        if (totalBytesWritten != localFileSize) {
-            std::string msg = "Uploaded file size mismatch. Expected: " + std::to_string(localFileSize) + ", Uploaded: " + std::to_string(totalBytesWritten);
-            throw std::runtime_error(msg);
-        }
-
-        if (progressHandler) {
-            progressHandler(static_cast<double>(localFileSize), static_cast<double>(localFileSize));
-        }
-
-        cleanup();
-        return totalBytesWritten;
-    } catch (const std::exception& e) {
-        cleanup();
-        try {
-            smb2_unlink(ctx, remotePath.c_str());
-        } catch (const std::exception& unlinkError) {
-        }
-
-        throw;
-    }
+SmbErrorCode mapErrnoOrIo(int err) {
+    const int mapped = SmbErrorMapper::fromErrno(err);
+    return mapped == static_cast<int>(SmbErrorCode::Unknown) ? SmbErrorCode::Io : static_cast<SmbErrorCode>(mapped);
 }
 
-int64_t smbCopyFile(void* ctxVoid, const std::string& fromPath, const std::string& toPath, std::shared_ptr<int64_t> totalBytesCopied, int64_t totalSize,
-                    std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
-    smb2_context* ctx = static_cast<smb2_context*>(ctxVoid);
-
-    // Open source file
-    smb2fh* sourceFh = smb2_open(ctx, fromPath.c_str(), O_RDONLY);
-    if (!sourceFh) {
-        std::string error = smb2_get_error(ctx);
-        std::string msg = "Failed to open source file '" + fromPath + "': " + error;
-        throw std::runtime_error(msg);
-    }
-
-    // Open destination file
-    smb2fh* destFh = smb2_open(ctx, toPath.c_str(), O_WRONLY | O_CREAT | O_EXCL);
-    if (!destFh) {
-        smb2_close(ctx, sourceFh);
-        std::string error = smb2_get_error(ctx);
-        std::string msg = "Failed to create destination file '" + toPath + "': " + error;
-        throw std::runtime_error(msg);
-    }
-
-    auto cleanup = [&]() {
-        smb2_close(ctx, sourceFh);
-        smb2_close(ctx, destFh);
-    };
-
-    try {
-        constexpr size_t BUFFER_SIZE = 64 * 1024;
-        std::vector<uint8_t> buffer(BUFFER_SIZE);
-        int64_t fileBytescopied = 0;
-
-        ssize_t bytesRead;
-        while ((bytesRead = smb2_read(ctx, sourceFh, buffer.data(), BUFFER_SIZE)) > 0) {
-            // Check for cancellation
-            if (cancel.cancelled()) {
-                cleanup();
-                smb2_unlink(ctx, toPath.c_str());
-                return 0;
-            }
-
-            ssize_t bytesWritten = smb2_write(ctx, destFh, buffer.data(), static_cast<uint32_t>(bytesRead));
-            if (bytesWritten < 0) {
-                std::string error = smb2_get_error(ctx);
-                std::string msg = "Failed to write to destination file '" + toPath + "': " + error;
-                throw std::runtime_error(msg);
-            }
-            if (bytesWritten != bytesRead) {
-                std::string msg = "Incomplete write to destination file '" + toPath + "'";
-                throw std::runtime_error(msg);
-            }
-
-            fileBytescopied += bytesWritten;
-
-            // Update cumulative progress if counter is provided
-            if (totalBytesCopied) {
-                *totalBytesCopied += bytesWritten;
-            }
-
-            // Report progress if handler is provided
-            if (progressHandler && totalSize > 0) {
-                int64_t currentProgress = totalBytesCopied ? *totalBytesCopied : fileBytescopied;
-                progressHandler(static_cast<double>(currentProgress), static_cast<double>(totalSize));
-            }
-        }
-
-        if (bytesRead < 0) {
-            std::string error = smb2_get_error(ctx);
-            std::string msg = "Failed to read from source file '" + fromPath + "': " + error;
-            throw std::runtime_error(msg);
-        }
-
-        // Sync the destination file
-        if (smb2_fsync(ctx, destFh) < 0) {
-            // Sync failed, but continue
-        }
-
-        cleanup();
-
-        return fileBytescopied;
-    } catch (const std::exception& e) {
-        cleanup();
-        // Try to delete the incomplete destination file
-        try {
-            smb2_unlink(ctx, toPath.c_str());
-        } catch (const std::exception& unlinkError) {
-        }
-        throw;
-    }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Async pipelined file I/O
@@ -411,7 +132,15 @@ struct AsyncReadState {
     int64_t lastEmittedBytes = 0;
     int inFlight = 0;
     bool errored = false;
+    SmbErrorCode errorCode{SmbErrorCode::Unknown};
     std::string errorMsg;
+
+    void fail(SmbErrorCode code, std::string msg) {
+        if (errored) return;
+        errored = true;
+        errorCode = code;
+        errorMsg = std::move(msg);
+    }
 
     struct ChunkSlot {
         std::vector<uint8_t> buf;
@@ -429,10 +158,9 @@ struct AsyncReadState {
     bool isDone() const { return errored || bytesCompleted >= fileSize; }
 
     void markCancelled() {
-        if (!errored) {
-            errored = true;
-            errorMsg = "Download cancelled";
-        }
+        SMB_LOG("Download markCancelled inFlight=%d bytesCompleted=%lld/%lld", inFlight, static_cast<long long>(bytesCompleted),
+                static_cast<long long>(fileSize));
+        fail(SmbErrorCode::Cancelled, "Download cancelled");
     }
 
     // Safety: every byte has been requested, nothing is in flight, all
@@ -489,8 +217,8 @@ struct AsyncReadState {
 
         int ret = smb2_pread_async(ctx, fh, slots[slot].buf.data(), len, offset, readCb, this);
         if (ret < 0) {
-            errored = true;
-            errorMsg = std::string("Download Failed: smb2_pread_async: ") + smb2_get_error(ctx);
+            const std::string msg = std::string("Download Failed: smb2_pread_async: ") + smb2_get_error(ctx);
+            fail(mapSmbResult(ret, msg), msg);
             slots[slot].available = true;
             nextOffset -= len;
             return;
@@ -513,14 +241,13 @@ struct AsyncReadState {
             return;
         }
         if (status < 0) {
-            st->errored = true;
-            st->errorMsg = std::string("Download Failed: read error: ") + smb2_get_error(smb2);
+            const std::string msg = std::string("Download Failed: read error: ") + smb2_get_error(smb2);
+            st->fail(mapSmbResult(status, msg), msg);
             if (slotIdx >= 0) st->slots[slotIdx].available = true;
             return;
         }
         if (slotIdx < 0) {
-            st->errored = true;
-            st->errorMsg = "Download Failed: internal slot lookup failed";
+            st->fail(SmbErrorCode::Io, "Download Failed: internal slot lookup failed");
             return;
         }
 
@@ -533,8 +260,7 @@ struct AsyncReadState {
         // ── Persist the received bytes to local file ──
         if (st->outFile && status > 0) {
             if (fseeko(st->outFile, static_cast<off_t>(writeOffset), SEEK_SET) != 0 || fwrite(cbd->buf, 1, static_cast<size_t>(status), st->outFile) != static_cast<size_t>(status)) {
-                st->errored = true;
-                st->errorMsg = "Download Failed: local file write error";
+                st->fail(mapErrnoOrIo(errno), "Download Failed: local file write error");
                 slot.available = true;
                 return;
             }
@@ -548,9 +274,7 @@ struct AsyncReadState {
         // re-submit the tail on the SAME slot without freeing it.
         if (slot.received < slot.requested) {
             if (status == 0) {
-                // Zero-byte completion before fileSize → unrecoverable.
-                st->errored = true;
-                st->errorMsg = "Download Failed: unexpected EOF (zero-byte read)";
+                st->fail(SmbErrorCode::Io, "Download Failed: unexpected EOF (zero-byte read)");
                 slot.available = true;
                 return;
             }
@@ -560,8 +284,8 @@ struct AsyncReadState {
                     tailLen, static_cast<unsigned long long>(tailOffset));
             int ret = smb2_pread_async(st->ctx, st->fh, slot.buf.data() + slot.received, tailLen, tailOffset, readCb, st);
             if (ret < 0) {
-                st->errored = true;
-                st->errorMsg = std::string("Download Failed: short-read recovery smb2_pread_async: ") + smb2_get_error(st->ctx);
+                const std::string msg = std::string("Download Failed: short-read recovery smb2_pread_async: ") + smb2_get_error(st->ctx);
+                st->fail(mapSmbResult(ret, msg), msg);
                 slot.available = true;
                 return;
             }
@@ -581,7 +305,7 @@ struct AsyncReadState {
 
     void cleanup() {
         if (outFile) {
-            fflush(outFile);
+            // Best-effort close during error cleanup — finalizeLocalFile() checks on the success path.
             fclose(outFile);
             outFile = nullptr;
         }
@@ -589,6 +313,38 @@ struct AsyncReadState {
             smb2_close(ctx, fh);
             fh = nullptr;
         }
+    }
+
+    // Flush+close local file on success path. Returns false and sets errored on failure.
+    bool finalizeLocalFile() {
+        if (!outFile) return true;
+        if (fflush(outFile) != 0) {
+            const int err = errno;
+            fclose(outFile);
+            outFile = nullptr;
+            fail(mapErrnoOrIo(err), std::string("Download Failed: fflush failed: ") + std::strerror(err));
+            return false;
+        }
+        if (fclose(outFile) != 0) {
+            const int err = errno;
+            outFile = nullptr;
+            fail(mapErrnoOrIo(err), std::string("Download Failed: fclose failed: ") + std::strerror(err));
+            return false;
+        }
+        outFile = nullptr;
+        return true;
+    }
+
+    bool closeRemote() {
+        if (!(fh && ctx)) return true;
+        const int r = smb2_close(ctx, fh);
+        fh = nullptr;
+        if (r < 0) {
+            const std::string msg = std::string("Download Failed: smb2_close: ") + smb2_get_error(ctx);
+            fail(mapSmbResult(r, msg), msg);
+            return false;
+        }
+        return true;
     }
 };
 
@@ -611,7 +367,15 @@ struct AsyncWriteState {
     int64_t lastEmittedBytes = 0;
     int inFlight = 0;
     bool errored = false;
+    SmbErrorCode errorCode{SmbErrorCode::Unknown};
     std::string errorMsg;
+
+    void fail(SmbErrorCode code, std::string msg) {
+        if (errored) return;
+        errored = true;
+        errorCode = code;
+        errorMsg = std::move(msg);
+    }
 
     struct ChunkSlot {
         std::vector<uint8_t> buf;
@@ -627,6 +391,12 @@ struct AsyncWriteState {
     std::string remotePath;
 
     bool isDone() const { return errored || bytesCompleted >= fileSize; }
+
+    void markCancelled() {
+        SMB_LOG("Upload markCancelled inFlight=%d bytesCompleted=%lld/%lld", inFlight, static_cast<long long>(bytesCompleted),
+                static_cast<long long>(fileSize));
+        fail(SmbErrorCode::Cancelled, "Upload cancelled");
+    }
 
     bool isStuck() const {
         if (errored || inFlight > 0) return false;
@@ -650,8 +420,7 @@ struct AsyncWriteState {
     void submitNextWrite() {
         if (errored || nextOffset >= static_cast<uint64_t>(fileSize)) return;
         if (cancel.cancelled()) {
-            errored = true;
-            errorMsg = "Upload cancelled";
+            markCancelled();
             return;
         }
 
@@ -671,8 +440,7 @@ struct AsyncWriteState {
 
         // Read chunk from local file
         if (fseeko(inFile, static_cast<off_t>(nextOffset), SEEK_SET) != 0 || fread(slots[slot].buf.data(), 1, len, inFile) != len) {
-            errored = true;
-            errorMsg = "Upload Failed: could not read from local file";
+            fail(mapErrnoOrIo(errno), "Upload Failed: could not read from local file");
             return;
         }
 
@@ -685,8 +453,8 @@ struct AsyncWriteState {
 
         int ret = smb2_pwrite_async(ctx, fh, slots[slot].buf.data(), len, offset, writeCb, this);
         if (ret < 0) {
-            errored = true;
-            errorMsg = std::string("Upload Failed: smb2_pwrite_async: ") + smb2_get_error(ctx);
+            const std::string msg = std::string("Upload Failed: smb2_pwrite_async: ") + smb2_get_error(ctx);
+            fail(mapSmbResult(ret, msg), msg);
             slots[slot].available = true;
             nextOffset -= len;
             return;
@@ -706,14 +474,13 @@ struct AsyncWriteState {
             return;
         }
         if (status < 0) {
-            st->errored = true;
-            st->errorMsg = std::string("Upload Failed: write error: ") + smb2_get_error(smb2);
+            const std::string msg = std::string("Upload Failed: write error: ") + smb2_get_error(smb2);
+            st->fail(mapSmbResult(status, msg), msg);
             if (slotIdx >= 0) st->slots[slotIdx].available = true;
             return;
         }
         if (slotIdx < 0) {
-            st->errored = true;
-            st->errorMsg = "Upload Failed: internal slot lookup failed";
+            st->fail(SmbErrorCode::Io, "Upload Failed: internal slot lookup failed");
             return;
         }
 
@@ -724,8 +491,7 @@ struct AsyncWriteState {
         // ── L1: short-write recovery ──
         if (slot.written < slot.requested) {
             if (status == 0) {
-                st->errored = true;
-                st->errorMsg = "Upload Failed: server accepted zero bytes";
+                st->fail(SmbErrorCode::Io, "Upload Failed: server accepted zero bytes");
                 slot.available = true;
                 return;
             }
@@ -735,8 +501,8 @@ struct AsyncWriteState {
                     tailLen, static_cast<unsigned long long>(tailOffset));
             int ret = smb2_pwrite_async(st->ctx, st->fh, slot.buf.data() + slot.written, tailLen, tailOffset, writeCb, st);
             if (ret < 0) {
-                st->errored = true;
-                st->errorMsg = std::string("Upload Failed: short-write recovery smb2_pwrite_async: ") + smb2_get_error(st->ctx);
+                const std::string msg = std::string("Upload Failed: short-write recovery smb2_pwrite_async: ") + smb2_get_error(st->ctx);
+                st->fail(mapSmbResult(ret, msg), msg);
                 slot.available = true;
                 return;
             }
@@ -755,7 +521,7 @@ struct AsyncWriteState {
 
     void cleanup() {
         if (fh && ctx) {
-            smb2_fsync(ctx, fh);
+            // Best-effort on error/cancel path — finalizeRemoteFile() checks on success.
             smb2_close(ctx, fh);
             fh = nullptr;
         }
@@ -763,6 +529,38 @@ struct AsyncWriteState {
             fclose(inFile);
             inFile = nullptr;
         }
+    }
+
+    bool finalizeRemoteFile() {
+        if (fh && ctx) {
+            const int syncResult = smb2_fsync(ctx, fh);
+            if (syncResult < 0) {
+                const std::string msg = std::string("Upload Failed: smb2_fsync: ") + smb2_get_error(ctx);
+                fail(mapSmbResult(syncResult, msg), msg);
+                smb2_close(ctx, fh);
+                fh = nullptr;
+                return false;
+            }
+            const int closeResult = smb2_close(ctx, fh);
+            fh = nullptr;
+            if (closeResult < 0) {
+                const std::string msg = std::string("Upload Failed: smb2_close: ") + smb2_get_error(ctx);
+                fail(mapSmbResult(closeResult, msg), msg);
+                return false;
+            }
+            fh = nullptr;
+        }
+        if (inFile) {
+            if (fclose(inFile) != 0) {
+                const int err = errno;
+                inFile = nullptr;
+                fail(mapErrnoOrIo(err),
+                     std::string("Upload Failed: fclose local input failed: ") + std::strerror(err));
+                return false;
+            }
+            inFile = nullptr;
+        }
+        return true;
     }
 
     void cleanupOnError() {
@@ -790,12 +588,35 @@ struct AsyncWriteState {
 
 namespace {
 
-template <typename DoneFn, typename TickFn>
-bool drivePollLoop(smb2_context* ctx, DoneFn&& done, TickFn&& tick) {
+// No-progress idle deadline for transfer poll loops. Large files with steady
+// progress are never timed out by this alone.
+constexpr auto kTransferIdleTimeout = std::chrono::minutes(5);
+
+enum class PollLoopResult {
+    Done,
+    TimedOut,
+    PollFailed,
+};
+
+template <typename DoneFn, typename TickFn, typename ProgressFn>
+PollLoopResult drivePollLoop(smb2_context* ctx, DoneFn&& done, TickFn&& tick, ProgressFn&& progressBytes) {
+    using clock = std::chrono::steady_clock;
+    auto lastProgressAt = clock::now();
+    int64_t lastSeenBytes = progressBytes();
+
     struct pollfd pfd;
     while (!done()) {
         tick();
         if (done()) break;
+
+        const int64_t nowBytes = progressBytes();
+        if (nowBytes != lastSeenBytes) {
+            lastSeenBytes = nowBytes;
+            lastProgressAt = clock::now();
+        } else if (clock::now() - lastProgressAt > kTransferIdleTimeout) {
+            return PollLoopResult::TimedOut;
+        }
+
         pfd.fd = smb2_get_fd(ctx);
         pfd.events = smb2_which_events(ctx);
         pfd.revents = 0;
@@ -808,38 +629,69 @@ bool drivePollLoop(smb2_context* ctx, DoneFn&& done, TickFn&& tick) {
         int ret = ::poll(&pfd, 1, 100 /*ms*/);
         if (ret < 0) {
             if (errno == EINTR) continue;
-            return false;
+            return PollLoopResult::PollFailed;
         }
         if (ret == 0) continue;  // timeout, retry
         int svc = smb2_service(ctx, pfd.revents);
-        if (svc < 0) return false;
+        if (svc < 0) return PollLoopResult::PollFailed;
     }
-    return true;
+    return PollLoopResult::Done;
 }
 
-// Drive the smb2 poll/service loop on the calling thread until `done()` is
-// true. Used by async read/write/copy paths to pump pipelined chunks.
-// Returns false if poll() failed with anything other than EINTR.
-template <typename DoneFn>
-bool drivePollLoop(smb2_context* ctx, DoneFn&& done) {
-    return drivePollLoop(ctx, std::forward<DoneFn>(done), []() {});
+[[noreturn]] void raiseTransferError(SmbErrorCode code, const std::string& message) {
+    if (code != SmbErrorCode::Unknown) {
+        SmbException::raise(code, message);
+    }
+    SmbException::raise(SmbErrorMapper::fromErrnoOrMessage(0, message), message);
+}
+
+template <typename StateT>
+void invalidateTransferContext(SmbConnectionManager& manager, StateT& state) {
+    SMB_LOG("transfer invalidateContext inFlight=%d", state.inFlight);
+    manager.invalidateContext();
+    state.ctx = nullptr;
+    if constexpr (requires { state.fh; }) {
+        state.fh = nullptr;
+    }
+    if constexpr (requires { state.srcFh; }) {
+        state.srcFh = nullptr;
+    }
+    if constexpr (requires { state.dstFh; }) {
+        state.dstFh = nullptr;
+    }
+}
+
+// Invalidate before unwinding state that outstanding callbacks may reference.
+template <typename StateT>
+void abortTransferTransport(PollLoopResult pollResult, SmbConnectionManager& manager, StateT& state) {
+    const bool transportAbort = pollResult == PollLoopResult::TimedOut || pollResult == PollLoopResult::PollFailed;
+    if (!transportAbort) return;
+    if (!state.errored) {
+        state.fail(SmbErrorCode::Io, "Transfer Failed: transport aborted");
+    }
+    invalidateTransferContext(manager, state);
 }
 
 }  // anonymous namespace
 
-int64_t smbReadFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std::string& remotePath, const std::string& localPath, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
+int64_t smbReadFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std::string& remotePath, const std::string& localPath,
+                         const std::string& taskId, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
     smb2_context* ctx = static_cast<smb2_context*>(ctxVoid);
+
+    const std::string finalPath = localPath;
+    const std::string tempPath = path_util::tempSiblingPath(finalPath, taskId.empty() ? "tmp" : taskId);
 
     AsyncReadState state;
     state.ctx = ctx;
     state.progressHandler = std::move(progressHandler);
     state.cancel = cancel;
-    state.localPath = localPath;
+    state.localPath = tempPath;
 
     // Open remote file
     state.fh = smb2_open(ctx, remotePath.c_str(), O_RDONLY);
     if (!state.fh) {
-        throw std::runtime_error("Download Failed: Could not open remote file '" + remotePath + "': " + smb2_get_error(ctx));
+        const std::string msg = "Download Failed: Could not open remote file '" + remotePath + "': " + smb2_get_error(ctx);
+        SmbException::raise(SmbErrorMapper::fromErrnoOrMessage(0, msg), msg);
     }
 
     // Get file size
@@ -847,16 +699,44 @@ int64_t smbReadFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std
     if (smb2_fstat(ctx, state.fh, &st) < 0) {
         std::string err = smb2_get_error(ctx);
         smb2_close(ctx, state.fh);
-        throw std::runtime_error("Download Failed: Could not stat '" + remotePath + "': " + err);
+        SmbException::raise(SmbErrorCode::Io, "Download Failed: Could not stat '" + remotePath + "': " + err);
     }
     state.fileSize = static_cast<int64_t>(st.smb2_size);
 
-    // Handle empty file
+    auto removeTempOnly = [&]() { std::remove(tempPath.c_str()); };
+
+    // Handle empty file via temp → rename
     if (state.fileSize == 0) {
-        FILE* f = fopen(localPath.c_str(), "wb");
-        if (f) fclose(f);
-        smb2_close(ctx, state.fh);
+        if (cancel.cancelled()) {
+            smb2_close(ctx, state.fh);
+            state.fh = nullptr;
+            SmbException::raise(SmbErrorCode::Cancelled, "Download cancelled");
+        }
+        FILE* f = fopen(tempPath.c_str(), "wb");
+        if (!f) {
+            smb2_close(ctx, state.fh);
+            SmbException::raiseFromErrno(errno, "Download Failed: Could not create local temp file '" + tempPath + "'");
+        }
+        if (fclose(f) != 0) {
+            const int err = errno;
+            removeTempOnly();
+            smb2_close(ctx, state.fh);
+            SmbException::raiseFromErrno(err, "Download Failed: fclose empty temp failed");
+        }
+        if (smb2_close(ctx, state.fh) < 0) {
+            removeTempOnly();
+            SmbException::raise(SmbErrorCode::Io, std::string("Download Failed: smb2_close: ") + smb2_get_error(ctx));
+        }
         state.fh = nullptr;
+        if (cancel.cancelled()) {
+            removeTempOnly();
+            SmbException::raise(SmbErrorCode::Cancelled, "Download cancelled");
+        }
+        if (std::rename(tempPath.c_str(), finalPath.c_str()) != 0) {
+            const int err = errno;
+            removeTempOnly();
+            SmbException::raiseFromErrno(err, "Download Failed: rename temp to final failed");
+        }
         if (state.progressHandler) state.progressHandler(0.0, 0.0);
         return 0;
     }
@@ -864,74 +744,171 @@ int64_t smbReadFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std
     // Determine chunk size from server negotiation, capped for cancel responsiveness.
     state.chunkSize = capAsyncChunkSize(smb2_get_max_read_size(ctx));
 
-    // Open local file for random-access writing
-    state.outFile = fopen(localPath.c_str(), "wb");
+    // Open local TEMP file for writing — never truncate finalPath until rename.
+    std::remove(tempPath.c_str());  // clear stale leftover from a prior crash
+    state.outFile = fopen(tempPath.c_str(), "wb");
     if (!state.outFile) {
         smb2_close(ctx, state.fh);
         state.fh = nullptr;
-        throw std::runtime_error("Download Failed: Could not create local file '" + localPath + "'");
+        SmbException::raiseFromErrno(errno, "Download Failed: Could not create local temp file '" + tempPath + "'");
     }
 
     if (state.progressHandler) state.progressHandler(0.0, static_cast<double>(state.fileSize));
 
-    // Kick off the first batch of async reads
     for (int i = 0; i < kMaxInFlight && !state.errored; i++) {
         state.submitNextRead();
     }
 
-    // Drive the poll loop until all chunks complete (or error / cancel / stuck).
-    // isStuck() is a defence-in-depth check: if a callback path ever fails
-    // to recover from a short transfer, the loop will exit instead of hanging.
-    bool pollOk = drivePollLoop(
+    const PollLoopResult pollResult = drivePollLoop(
         ctx, [&]() { return (state.isDone() && state.inFlight == 0) || state.isStuck(); },
         [&]() {
             if (cancel.cancelled() && !state.errored) {
                 state.markCancelled();
             }
-        });
+        },
+        [&]() { return state.bytesCompleted; });
+
     if (state.isStuck()) {
-        SMB_LOG("smbReadFileAsync: stuck-state safety net triggered (bytesCompleted=%lld fileSize=%lld)", static_cast<long long>(state.bytesCompleted), static_cast<long long>(state.fileSize));
-        state.errored = true;
-        state.errorMsg = "Download Failed: I/O pipeline stalled (unrecoverable short transfer)";
+        SMB_LOG("smbReadFileAsync: stuck-state safety net triggered (bytesCompleted=%lld fileSize=%lld)", static_cast<long long>(state.bytesCompleted),
+                static_cast<long long>(state.fileSize));
+        state.fail(SmbErrorCode::Io, "Download Failed: I/O pipeline stalled (unrecoverable short transfer)");
     }
-    if (!pollOk) {
-        if (!state.errored) {
-            state.errored = true;
-            state.errorMsg = std::string("Download Failed: poll/service: ") + smb2_get_error(ctx);
+    if (pollResult == PollLoopResult::TimedOut && !state.errored) {
+        if (cancel.cancelled()) {
+            state.markCancelled();
+        } else {
+            state.fail(SmbErrorCode::TimedOut, "Download Failed: transfer timed out (no progress)");
         }
-        manager.invalidateContext();
-        state.ctx = nullptr;
-        state.fh = nullptr;
+    }
+    if (pollResult == PollLoopResult::PollFailed && !state.errored) {
+        state.fail(SmbErrorCode::Io, std::string("Download Failed: poll/service: ") + smb2_get_error(ctx));
     }
 
-    state.cleanup();
+    abortTransferTransport(pollResult, manager, state);
 
     if (state.errored) {
-        std::remove(localPath.c_str());
-        throw std::runtime_error(state.errorMsg);
+        SMB_LOG("smbReadFileAsync errored code=%d inFlight=%d msg=%s", static_cast<int>(state.errorCode), state.inFlight, state.errorMsg.c_str());
+        state.cleanup();
+        removeTempOnly();
+        raiseTransferError(state.errorCode, state.errorMsg);
     }
+
+    if (!state.finalizeLocalFile()) {
+        state.closeRemote();
+        removeTempOnly();
+        raiseTransferError(state.errorCode, state.errorMsg);
+    }
+    if (!state.closeRemote()) {
+        removeTempOnly();
+        SmbException::raise(SmbErrorCode::Io, state.errorMsg);
+    }
+
     if (state.bytesCompleted != state.fileSize) {
-        std::remove(localPath.c_str());
-        throw std::runtime_error("Downloaded file size mismatch. Expected: " + std::to_string(state.fileSize) + ", Got: " + std::to_string(state.bytesCompleted));
+        removeTempOnly();
+        SmbException::raise(SmbErrorCode::Io, "Downloaded file size mismatch. Expected: " + std::to_string(state.fileSize) +
+                                                  ", Got: " + std::to_string(state.bytesCompleted));
+    }
+
+    if (cancel.cancelled()) {
+        removeTempOnly();
+        SmbException::raise(SmbErrorCode::Cancelled, "Download cancelled");
+    }
+    if (std::rename(tempPath.c_str(), finalPath.c_str()) != 0) {
+        const int err = errno;
+        removeTempOnly();
+        SmbException::raiseFromErrno(err, "Download Failed: rename temp to final failed");
     }
 
     if (state.progressHandler) state.progressHandler(static_cast<double>(state.fileSize), static_cast<double>(state.fileSize));
     return state.bytesCompleted;
 }
 
-int64_t smbWriteFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std::string& localPath, const std::string& remotePath, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
+namespace {
+
+enum class RemotePathPresence {
+    Exists,
+    NotFound,
+    Error,
+};
+
+RemotePathPresence remotePathPresence(smb2_context* ctx, const std::string& path, std::string* errorOut = nullptr, int* codeOut = nullptr) {
+    struct smb2_stat_64 st {};
+    const int r = smb2_stat(ctx, path.c_str(), &st);
+    if (r == 0) return RemotePathPresence::Exists;
+    const std::string err = smb2_get_error(ctx);
+    const int mapped = static_cast<int>(mapSmbResult(r, err));
+    if (mapped == static_cast<int>(SmbErrorCode::NotFound)) return RemotePathPresence::NotFound;
+    if (errorOut) *errorOut = err;
+    if (codeOut) *codeOut = mapped;
+    return RemotePathPresence::Error;
+}
+
+bool remotePathExists(smb2_context* ctx, const std::string& path) {
+    std::string err;
+    int code = static_cast<int>(SmbErrorCode::Io);
+    const auto presence = remotePathPresence(ctx, path, &err, &code);
+    if (presence == RemotePathPresence::Exists) return true;
+    if (presence == RemotePathPresence::NotFound) return false;
+    SmbException::raise(code, "Upload Failed: could not stat '" + path + "': " + err);
+}
+
+// Commit remote temp → final. Samba/Windows often cannot rename over an existing
+// name, so use a backup sibling and restore it if the final rename fails.
+void commitRemoteRename(smb2_context* ctx, const std::string& tempPath, const std::string& finalPath, const std::string& taskId) {
+    const bool finalExists = remotePathExists(ctx, finalPath);
+    if (!finalExists) {
+        const int r = smb2_rename(ctx, tempPath.c_str(), finalPath.c_str());
+        if (r < 0) {
+            SmbException::raiseFromErrnoResult(r, std::string("Upload Failed: smb2_rename temp→final: ") + smb2_get_error(ctx));
+        }
+        return;
+    }
+
+    const std::string backupPath = path_util::backupSiblingPath(finalPath, taskId.empty() ? "tmp" : taskId);
+    if (remotePathExists(ctx, backupPath)) {
+        SmbException::raise(SmbErrorCode::AlreadyExists,
+                            "Upload Failed: backup path already exists from a prior attempt ('" + backupPath + "')");
+    }
+
+    const int moveAside = smb2_rename(ctx, finalPath.c_str(), backupPath.c_str());
+    if (moveAside < 0) {
+        SmbException::raiseFromErrnoResult(moveAside, std::string("Upload Failed: could not move existing destination aside: ") + smb2_get_error(ctx));
+    }
+
+    const int commit = smb2_rename(ctx, tempPath.c_str(), finalPath.c_str());
+    if (commit < 0) {
+        const std::string err = smb2_get_error(ctx);
+        const int restore = smb2_rename(ctx, backupPath.c_str(), finalPath.c_str());
+        if (restore < 0) {
+            SmbException::raiseFromErrnoResult(
+                commit, "Upload Failed: smb2_rename temp→final failed (" + err + ") and restore from backup also failed: " + smb2_get_error(ctx));
+        }
+        SmbException::raiseFromErrnoResult(commit, "Upload Failed: smb2_rename temp→final after backup: " + err);
+    }
+
+    if (smb2_unlink(ctx, backupPath.c_str()) < 0) {
+        SMB_LOG("commitRemoteRename: best-effort backup unlink failed path=%s err=%s", backupPath.c_str(), smb2_get_error(ctx));
+    }
+}
+
+}  // namespace
+
+int64_t smbWriteFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std::string& localPath, const std::string& remotePath,
+                          const std::string& taskId, std::function<void(double, double)> progressHandler, const CancellationToken& cancel) {
     smb2_context* ctx = static_cast<smb2_context*>(ctxVoid);
+
+    const std::string finalRemote = remotePath;
+    const std::string tempRemote = path_util::tempSiblingPath(finalRemote, taskId.empty() ? "tmp" : taskId);
 
     AsyncWriteState state;
     state.ctx = ctx;
     state.progressHandler = std::move(progressHandler);
     state.cancel = cancel;
-    state.remotePath = remotePath;
+    state.remotePath = tempRemote;  // cleanupOnError unlinks temp only
 
-    // Open local file for reading and measure size.
     state.inFile = fopen(localPath.c_str(), "rb");
     if (!state.inFile) {
-        throw std::runtime_error("Upload Failed: Could not open local file '" + localPath + "'");
+        SmbException::raiseFromErrno(errno, "Upload Failed: Could not open local file '" + localPath + "'");
     }
     fseeko(state.inFile, 0, SEEK_END);
     int64_t localFileSize = static_cast<int64_t>(ftello(state.inFile));
@@ -939,72 +916,129 @@ int64_t smbWriteFileAsync(void* ctxVoid, SmbConnectionManager& manager, const st
     if (localFileSize < 0) {
         fclose(state.inFile);
         state.inFile = nullptr;
-        throw std::runtime_error("Upload Failed: Could not determine size of '" + localPath + "'");
+        SmbException::raise(SmbErrorCode::Io, "Upload Failed: Could not determine size of '" + localPath + "'");
     }
     state.fileSize = localFileSize;
 
-    // Handle empty file
+    auto unlinkTempOnly = [&]() {
+        if (ctx) smb2_unlink(ctx, tempRemote.c_str());
+    };
+
+    // Empty file: create temp then rename to final.
     if (state.fileSize == 0) {
-        smb2fh* fh = smb2_open(ctx, remotePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
-        if (fh) smb2_close(ctx, fh);
+        if (cancel.cancelled()) {
+            fclose(state.inFile);
+            state.inFile = nullptr;
+            SmbException::raise(SmbErrorCode::Cancelled, "Upload cancelled");
+        }
+        smb2_unlink(ctx, tempRemote.c_str());
+        smb2fh* fh = smb2_open(ctx, tempRemote.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+        if (!fh) {
+            fclose(state.inFile);
+            state.inFile = nullptr;
+            const std::string msg = "Upload Failed: Could not create remote temp '" + tempRemote + "': " + smb2_get_error(ctx);
+            SmbException::raise(SmbErrorMapper::fromErrnoOrMessage(0, msg), msg);
+        }
+        if (smb2_fsync(ctx, fh) < 0) {
+            const std::string err = smb2_get_error(ctx);
+            smb2_close(ctx, fh);
+            unlinkTempOnly();
+            fclose(state.inFile);
+            SmbException::raise(SmbErrorCode::Io, "Upload Failed: smb2_fsync empty temp: " + err);
+        }
+        if (smb2_close(ctx, fh) < 0) {
+            const std::string err = smb2_get_error(ctx);
+            unlinkTempOnly();
+            fclose(state.inFile);
+            SmbException::raise(SmbErrorCode::Io, "Upload Failed: smb2_close empty temp: " + err);
+        }
         fclose(state.inFile);
         state.inFile = nullptr;
+        if (cancel.cancelled()) {
+            unlinkTempOnly();
+            SmbException::raise(SmbErrorCode::Cancelled, "Upload cancelled");
+        }
+        try {
+            commitRemoteRename(ctx, tempRemote, finalRemote, taskId);
+        } catch (...) {
+            unlinkTempOnly();
+            throw;
+        }
         if (state.progressHandler) state.progressHandler(0.0, 0.0);
         return 0;
     }
 
-    // Open remote file for writing
-    state.fh = smb2_open(ctx, remotePath.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+    smb2_unlink(ctx, tempRemote.c_str());
+    state.fh = smb2_open(ctx, tempRemote.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
     if (!state.fh) {
         std::string err = smb2_get_error(ctx);
         fclose(state.inFile);
         state.inFile = nullptr;
-        throw std::runtime_error("Upload Failed: Could not create remote file '" + remotePath + "': " + err);
+        const std::string msg = "Upload Failed: Could not create remote temp '" + tempRemote + "': " + err;
+        SmbException::raise(SmbErrorMapper::fromErrnoOrMessage(0, msg), msg);
     }
 
-    // Determine chunk size from server negotiation, capped for cancel responsiveness.
     state.chunkSize = capAsyncChunkSize(smb2_get_max_write_size(ctx));
 
     if (state.progressHandler) state.progressHandler(0.0, static_cast<double>(state.fileSize));
 
-    // Kick off the first batch of async writes
     for (int i = 0; i < kMaxInFlight && !state.errored; i++) {
         state.submitNextWrite();
     }
 
-    bool pollOk = drivePollLoop(
+    const PollLoopResult pollResult = drivePollLoop(
         ctx, [&]() { return (state.isDone() && state.inFlight == 0) || state.isStuck(); },
         [&]() {
             if (cancel.cancelled() && !state.errored) {
-                state.errored = true;
-                state.errorMsg = "Upload cancelled";
+                state.markCancelled();
             }
-        });
+        },
+        [&]() { return state.bytesCompleted; });
+
     if (state.isStuck()) {
-        SMB_LOG("smbWriteFileAsync: stuck-state safety net triggered (bytesCompleted=%lld fileSize=%lld)", static_cast<long long>(state.bytesCompleted), static_cast<long long>(state.fileSize));
-        state.errored = true;
-        state.errorMsg = "Upload Failed: I/O pipeline stalled (unrecoverable short transfer)";
+        SMB_LOG("smbWriteFileAsync: stuck-state safety net triggered (bytesCompleted=%lld fileSize=%lld)", static_cast<long long>(state.bytesCompleted),
+                static_cast<long long>(state.fileSize));
+        state.fail(SmbErrorCode::Io, "Upload Failed: I/O pipeline stalled (unrecoverable short transfer)");
     }
-    if (!pollOk) {
-        if (!state.errored) {
-            state.errored = true;
-            state.errorMsg = std::string("Upload Failed: poll/service: ") + smb2_get_error(ctx);
+    if (pollResult == PollLoopResult::TimedOut && !state.errored) {
+        if (cancel.cancelled()) {
+            state.markCancelled();
+        } else {
+            state.fail(SmbErrorCode::TimedOut, "Upload Failed: transfer timed out (no progress)");
         }
-        manager.invalidateContext();
-        state.ctx = nullptr;
-        state.fh = nullptr;
     }
+    if (pollResult == PollLoopResult::PollFailed && !state.errored) {
+        state.fail(SmbErrorCode::Io, std::string("Upload Failed: poll/service: ") + smb2_get_error(ctx));
+    }
+
+    abortTransferTransport(pollResult, manager, state);
 
     if (state.errored) {
+        SMB_LOG("smbWriteFileAsync errored code=%d inFlight=%d msg=%s", static_cast<int>(state.errorCode), state.inFlight, state.errorMsg.c_str());
         state.cleanupOnError();
-        throw std::runtime_error(state.errorMsg);
+        raiseTransferError(state.errorCode, state.errorMsg);
     }
 
-    state.cleanup();
+    if (!state.finalizeRemoteFile()) {
+        unlinkTempOnly();
+        raiseTransferError(state.errorCode, state.errorMsg);
+    }
 
     if (state.bytesCompleted != state.fileSize) {
-        smb2_unlink(ctx, remotePath.c_str());
-        throw std::runtime_error("Uploaded file size mismatch. Expected: " + std::to_string(state.fileSize) + ", Uploaded: " + std::to_string(state.bytesCompleted));
+        unlinkTempOnly();
+        SmbException::raise(SmbErrorCode::Io, "Uploaded file size mismatch. Expected: " + std::to_string(state.fileSize) +
+                                                  ", Uploaded: " + std::to_string(state.bytesCompleted));
+    }
+
+    if (cancel.cancelled()) {
+        unlinkTempOnly();
+        SmbException::raise(SmbErrorCode::Cancelled, "Upload cancelled");
+    }
+    try {
+        commitRemoteRename(ctx, tempRemote, finalRemote, taskId);
+    } catch (...) {
+        unlinkTempOnly();
+        throw;
     }
 
     if (state.progressHandler) state.progressHandler(static_cast<double>(state.fileSize), static_cast<double>(state.fileSize));
@@ -1034,7 +1068,15 @@ struct AsyncCopyState {
     int64_t lastEmittedBytes = 0;
     int inFlight = 0;
     bool errored = false;
+    SmbErrorCode errorCode{SmbErrorCode::Unknown};
     std::string errorMsg;
+
+    void fail(SmbErrorCode code, std::string msg) {
+        if (errored) return;
+        errored = true;
+        errorCode = code;
+        errorMsg = std::move(msg);
+    }
 
     struct ChunkSlot {
         enum State { Idle, Reading, Writing };
@@ -1090,8 +1132,7 @@ struct AsyncCopyState {
     void submitNextRead() {
         if (errored || nextReadOffset >= static_cast<uint64_t>(fileSize)) return;
         if (cancel.cancelled()) {
-            errored = true;
-            errorMsg = "Copy cancelled";
+            fail(SmbErrorCode::Cancelled, "Copy cancelled");
             return;
         }
 
@@ -1117,8 +1158,8 @@ struct AsyncCopyState {
 
         int ret = smb2_pread_async(ctx, srcFh, slots[slot].buf.data(), len, slots[slot].baseOffset, readCb, &cbDatas[slot]);
         if (ret < 0) {
-            errored = true;
-            errorMsg = std::string("Copy Failed: smb2_pread_async: ") + smb2_get_error(ctx);
+            const std::string msg = std::string("Copy Failed: smb2_pread_async: ") + smb2_get_error(ctx);
+            fail(mapSmbResult(ret, msg), msg);
             slots[slot].state = ChunkSlot::Idle;
             nextReadOffset -= len;
             return;
@@ -1138,8 +1179,8 @@ struct AsyncCopyState {
         uint64_t tailOffset = slot.baseOffset + slot.written;
         int ret = smb2_pwrite_async(ctx, dstFh, slot.buf.data() + slot.written, tailLen, tailOffset, writeCb, &cbDatas[slotIdx]);
         if (ret < 0) {
-            errored = true;
-            errorMsg = std::string("Copy Failed: smb2_pwrite_async: ") + smb2_get_error(ctx);
+            const std::string msg = std::string("Copy Failed: smb2_pwrite_async: ") + smb2_get_error(ctx);
+            fail(mapSmbResult(ret, msg), msg);
             slot.state = ChunkSlot::Idle;
             return;
         }
@@ -1157,8 +1198,8 @@ struct AsyncCopyState {
             return;
         }
         if (status < 0) {
-            st->errored = true;
-            st->errorMsg = std::string("Copy Failed: read error: ") + smb2_get_error(smb2);
+            const std::string msg = std::string("Copy Failed: read error: ") + smb2_get_error(smb2);
+            st->fail(mapSmbResult(status, msg), msg);
             st->slots[slotIdx].state = ChunkSlot::Idle;
             return;
         }
@@ -1169,8 +1210,7 @@ struct AsyncCopyState {
         // ── L1: short-read recovery (re-issue tail on same slot) ──
         if (slot.read < slot.requested) {
             if (status == 0) {
-                st->errored = true;
-                st->errorMsg = "Copy Failed: unexpected EOF on source (zero-byte read)";
+                st->fail(SmbErrorCode::Io, "Copy Failed: unexpected EOF on source (zero-byte read)");
                 slot.state = ChunkSlot::Idle;
                 return;
             }
@@ -1180,8 +1220,8 @@ struct AsyncCopyState {
                     tailLen, static_cast<unsigned long long>(tailOffset));
             int ret = smb2_pread_async(st->ctx, st->srcFh, slot.buf.data() + slot.read, tailLen, tailOffset, readCb, &st->cbDatas[slotIdx]);
             if (ret < 0) {
-                st->errored = true;
-                st->errorMsg = std::string("Copy Failed: short-read recovery smb2_pread_async: ") + smb2_get_error(st->ctx);
+                const std::string msg = std::string("Copy Failed: short-read recovery smb2_pread_async: ") + smb2_get_error(st->ctx);
+                st->fail(mapSmbResult(ret, msg), msg);
                 slot.state = ChunkSlot::Idle;
                 return;
             }
@@ -1204,8 +1244,8 @@ struct AsyncCopyState {
             return;
         }
         if (status < 0) {
-            st->errored = true;
-            st->errorMsg = std::string("Copy Failed: write error: ") + smb2_get_error(smb2);
+            const std::string msg = std::string("Copy Failed: write error: ") + smb2_get_error(smb2);
+            st->fail(mapSmbResult(status, msg), msg);
             st->slots[slotIdx].state = ChunkSlot::Idle;
             return;
         }
@@ -1216,8 +1256,7 @@ struct AsyncCopyState {
         // ── L1: short-write recovery (re-issue tail on same slot) ──
         if (slot.written < slot.read) {
             if (status == 0) {
-                st->errored = true;
-                st->errorMsg = "Copy Failed: destination accepted zero bytes";
+                st->fail(SmbErrorCode::Io, "Copy Failed: destination accepted zero bytes");
                 slot.state = ChunkSlot::Idle;
                 return;
             }
@@ -1250,9 +1289,16 @@ struct AsyncCopyState {
             srcFh = nullptr;
         }
         if (dstFh && ctx) {
-            smb2_fsync(ctx, dstFh);
-            smb2_close(ctx, dstFh);
+            const int syncResult = smb2_fsync(ctx, dstFh);
+            const int closeResult = smb2_close(ctx, dstFh);
             dstFh = nullptr;
+            if (syncResult < 0) {
+                const std::string msg = std::string("Copy Failed: smb2_fsync: ") + smb2_get_error(ctx);
+                fail(mapSmbResult(syncResult, msg), msg);
+            } else if (closeResult < 0) {
+                const std::string msg = std::string("Copy Failed: smb2_close: ") + smb2_get_error(ctx);
+                fail(mapSmbResult(closeResult, msg), msg);
+            }
         }
     }
 
@@ -1289,34 +1335,40 @@ int64_t smbCopyFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std
     // Open source.
     state.srcFh = smb2_open(ctx, fromPath.c_str(), O_RDONLY);
     if (!state.srcFh) {
-        std::string err = smb2_get_error(ctx);
-        throw std::runtime_error("Copy Failed: Could not open source '" + fromPath + "': " + err);
+        const std::string msg = "Copy Failed: Could not open source '" + fromPath + "': " + smb2_get_error(ctx);
+        SmbException::raise(mapSmbResult(0, msg), msg);
     }
 
     // Size source.
     struct smb2_stat_64 st;
-    if (smb2_fstat(ctx, state.srcFh, &st) < 0) {
-        std::string err = smb2_get_error(ctx);
+    const int statResult = smb2_fstat(ctx, state.srcFh, &st);
+    if (statResult < 0) {
+        const std::string msg = "Copy Failed: Could not stat source '" + fromPath + "': " + smb2_get_error(ctx);
         smb2_close(ctx, state.srcFh);
-        throw std::runtime_error("Copy Failed: Could not stat source '" + fromPath + "': " + err);
+        SmbException::raise(mapSmbResult(statResult, msg), msg);
     }
     state.fileSize = static_cast<int64_t>(st.smb2_size);
 
     // Open destination (exclusive create).
     state.dstFh = smb2_open(ctx, toPath.c_str(), O_WRONLY | O_CREAT | O_EXCL);
     if (!state.dstFh) {
-        std::string err = smb2_get_error(ctx);
+        const std::string msg = "Copy Failed: Could not create destination '" + toPath + "': " + smb2_get_error(ctx);
         smb2_close(ctx, state.srcFh);
         state.srcFh = nullptr;
-        throw std::runtime_error("Copy Failed: Could not create destination '" + toPath + "': " + err);
+        SmbException::raise(mapSmbResult(0, msg), msg);
     }
 
-    // Handle empty file: nothing to read/write, just close.
+    // Handle empty file: nothing to read/write — still fsync/close via cleanup().
     if (state.fileSize == 0) {
-        smb2_fsync(ctx, state.dstFh);
-        smb2_close(ctx, state.dstFh);
-        smb2_close(ctx, state.srcFh);
-        state.srcFh = state.dstFh = nullptr;
+        if (cancel.cancelled()) {
+            state.cleanupOnError();
+            SmbException::raise(SmbErrorCode::Cancelled, "Copy cancelled");
+        }
+        state.cleanup();
+        if (state.errored) {
+            state.cleanupOnError();
+            raiseTransferError(state.errorCode, state.errorMsg);
+        }
         return 0;
     }
 
@@ -1329,42 +1381,47 @@ int64_t smbCopyFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std
         state.submitNextRead();
     }
 
-    bool pollOk = drivePollLoop(
+    const PollLoopResult pollResult = drivePollLoop(
         ctx, [&]() { return (state.isDone() && state.inFlight == 0) || state.isStuck(); },
         [&]() {
             if (cancel.cancelled() && !state.errored) {
-                state.errored = true;
-                state.errorMsg = "Copy cancelled";
+                state.fail(SmbErrorCode::Cancelled, "Copy cancelled");
             }
-        });
+        },
+        [&]() { return state.bytesCopied; });
     if (state.isStuck()) {
         SMB_LOG("smbCopyFileAsync: stuck-state safety net triggered (bytesCopied=%lld fileSize=%lld)", static_cast<long long>(state.bytesCopied), static_cast<long long>(state.fileSize));
-        state.errored = true;
-        state.errorMsg = "Copy Failed: I/O pipeline stalled (unrecoverable short transfer)";
+        state.fail(SmbErrorCode::Io, "Copy Failed: I/O pipeline stalled (unrecoverable short transfer)");
     }
-    if (!pollOk) {
-        if (!state.errored) {
-            state.errored = true;
-            state.errorMsg = std::string("Copy Failed: poll/service: ") + smb2_get_error(ctx);
+    if (pollResult == PollLoopResult::TimedOut && !state.errored) {
+        if (cancel.cancelled()) {
+            state.fail(SmbErrorCode::Cancelled, "Copy cancelled");
+        } else {
+            state.fail(SmbErrorCode::TimedOut, "Copy Failed: transfer timed out (no progress)");
         }
-        manager.invalidateContext();
-        state.ctx = nullptr;
-        state.srcFh = nullptr;
-        state.dstFh = nullptr;
+    }
+    if (pollResult == PollLoopResult::PollFailed && !state.errored) {
+        state.fail(SmbErrorCode::Io, std::string("Copy Failed: poll/service: ") + smb2_get_error(ctx));
     }
 
+    abortTransferTransport(pollResult, manager, state);
+
     if (state.errored) {
+        SMB_LOG("smbCopyFileAsync errored code=%d inFlight=%d msg=%s", static_cast<int>(state.errorCode), state.inFlight, state.errorMsg.c_str());
         state.cleanupOnError();
-        throw std::runtime_error(state.errorMsg);
+        raiseTransferError(state.errorCode, state.errorMsg);
+    }
+
+    if (state.bytesCopied != state.fileSize) {
+        state.cleanupOnError();
+        SmbException::raise(SmbErrorCode::Io, "Copied file size mismatch. Expected: " + std::to_string(state.fileSize) +
+                                                  ", Got: " + std::to_string(state.bytesCopied));
     }
 
     state.cleanup();
-
-    if (state.bytesCopied != state.fileSize) {
-        smb2_unlink(ctx, toPath.c_str());
-        throw std::runtime_error("Copied file size mismatch. Expected: " + std::to_string(state.fileSize) + ", Got: " + std::to_string(state.bytesCopied));
+    if (state.errored) {
+        raiseTransferError(state.errorCode, state.errorMsg);
     }
-
     return state.bytesCopied;
 }
 

@@ -139,7 +139,7 @@ const TransferTrayPanel = () => {
   }, [completedTasks]);
 
   const cancelTask = (taskId) => smb?.cancelTask(taskId);
-  const cancelAll = () => runningTasks.forEach((t) => smb?.cancelTask(t.taskId));
+  const cancelAll = () => smb?.cancelTransferTasks();
   const removeTask = (taskId) => hide(taskId);
   const [expanded, setExpanded] = useState(false);
 
@@ -201,6 +201,8 @@ const TransferTrayPanel = () => {
               const badge = statusBadge[badgeKey(t.status)] || statusBadge.running;
               const isDone = t.status === TaskStatus.Success;
               const isDownload = t.kind === SmbOperatorKind.DownloadFile;
+              const isActive =
+                t.status === TaskStatus.Running || t.status === TaskStatus.Pending;
               const isRunning = t.status === TaskStatus.Running;
               const shareUri = isDownload ? t.destinationPath : '';
               const rate = isRunning ? computeRate(t, now) : null;
@@ -238,8 +240,8 @@ const TransferTrayPanel = () => {
                   </View>
                   <TouchableOpacity
                     style={styles.rowAction}
-                    onPress={() => (isRunning ? cancelTask(t.taskId) : removeTask(t.taskId))}>
-                    <Text style={styles.rowActionText}>{isRunning ? 'Cancel' : 'Clear'}</Text>
+                    onPress={() => (isActive ? cancelTask(t.taskId) : removeTask(t.taskId))}>
+                    <Text style={styles.rowActionText}>{isActive ? 'Cancel' : 'Clear'}</Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
               );

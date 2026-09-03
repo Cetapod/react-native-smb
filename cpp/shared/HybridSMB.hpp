@@ -43,8 +43,13 @@ class HybridSMB : public ReactNativeSmb {
     };
     std::shared_ptr<TaskRunState> taskRuns_{std::make_shared<TaskRunState>()};
     LifecycleSerialExecutor lifecycleExecutor_;
+    std::atomic<bool> disposed_{false};
+    std::mutex shutdownMutex_;
 
     void cancelAllTasksExcept(const std::string& taskId);
+    void cancelTasksMatching(const std::function<bool(const std::shared_ptr<SmbTask>&)>& pred, const char* reason);
+    void forgetTask(const std::string& taskId);
+    void shutdownImpl();
     static void releaseTaskRun(const std::shared_ptr<TaskRunState>& state);
 
     using PoolListener = std::function<void(const std::vector<std::unordered_map<std::string, std::string>>&)>;
@@ -103,7 +108,10 @@ class HybridSMB : public ReactNativeSmb {
     std::vector<std::unordered_map<std::string, std::string>> getActiveTasks() override;
     std::vector<std::unordered_map<std::string, std::string>> getTaskHistory(int limit, int offset) override;
     void cancelTask(const std::string& taskId) override;
+    void cancelTransferTasks() override;
     void clearTaskHistory(int64_t beforeTs) override;
+
+    std::shared_ptr<Promise<void>> destroy() override;
 
     // Debug / instrumentation
     std::string subscribePoolInfo(const std::function<void(const std::vector<std::unordered_map<std::string, std::string>>&)>& listener) override;

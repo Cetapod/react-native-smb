@@ -35,7 +35,12 @@ export class SmbClient {
     return this.transfers_;
   }
 
-  dispose(): void {
+  /**
+   * Cancel tasks, disconnect the pool, wait for workers, and stop transfer tracking.
+   * Not reusable — create a new client with `SMB()` afterwards.
+   */
+  async destroy(): Promise<void> {
+    await this.native.destroy();
     this.transfers_?.stop();
     this.transfers_ = undefined;
   }
@@ -114,6 +119,10 @@ export class SmbClient {
 
   cancelTask(taskId: string): void {
     this.native.cancelTask(taskId);
+  }
+
+  cancelTransferTasks(): void {
+    this.native.cancelTransferTasks();
   }
 
   getPoolInfo(): PoolInfo {

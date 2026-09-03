@@ -6,6 +6,7 @@
 #include "../connection/SmbConnectionPool.hpp"
 #include "../operators/OperatorBase.hpp"
 #include "../util/SmbErrorMapper.hpp"
+#include "../util/SmbException.hpp"
 #include "TaskSnapshotCodec.hpp"
 #include "../util/SmbLog.hpp"
 
@@ -26,9 +27,12 @@ SmbTask::SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shar
 SmbTask::~SmbTask() = default;
 
 void SmbTask::cancel() {
-    SMB_LOG("Task cancel id=%s", getId().c_str());
-    if (auto pool = pool_.lock()) pool->cancelRequestsForTask(getId());
+    if (isSettled()) return;
+    // Trip the shared flag first so in-flight poll loops see cancel immediately.
+    // Pool queue cancellation can wake a waiting op with SmbException::Cancelled
+    // on the worker thread; the flag must already be set to avoid settling Error.
     SmbTaskCore::cancel();
+    if (auto pool = pool_.lock()) pool->cancelRequestsForTask(getId());
 }
 
 void SmbTask::start() {
@@ -60,18 +64,31 @@ void SmbTask::launchOp(size_t opIndex) {
         }
         auto pool = self->pool_.lock();
         if (!pool) {
+            if (!self->cancel_.cancelled()) {
+                self->settle(SmbTaskStatus::Error, "SMB connection pool is unavailable", static_cast<int>(SmbErrorCode::NotConnected));
+            }
             self->onOpFinished();
             return;
         }
         try {
             op->start(self.get(), pool.get(), self->cancel_, opIndex);
+        } catch (const SmbException& e) {
+            if (e.code() == SmbErrorCode::Cancelled || self->cancel_.cancelled()) {
+                self->SmbTaskCore::cancel();
+            } else {
+                self->settle(SmbTaskStatus::Error, e.what(), e.codeInt());
+            }
         } catch (const std::exception& e) {
-            if (!self->cancel_.cancelled()) {
+            if (self->cancel_.cancelled()) {
+                self->SmbTaskCore::cancel();
+            } else {
                 const int code = SmbErrorMapper::fromErrnoOrMessage(0, e.what());
                 self->settle(SmbTaskStatus::Error, e.what(), code);
             }
         } catch (...) {
-            if (!self->cancel_.cancelled()) {
+            if (self->cancel_.cancelled()) {
+                self->SmbTaskCore::cancel();
+            } else {
                 self->settle(SmbTaskStatus::Error, "unknown error", static_cast<int>(SmbErrorCode::Unknown));
             }
         }

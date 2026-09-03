@@ -154,6 +154,13 @@ void TaskObserverHub::clearHistory(int64_t beforeTs) {
     std::unique_lock lock(mutex_);
     if (beforeTs <= 0) {
         history_.clear();
+        // Drop terminal snapshots from the latest-snapshot map; keep active ones.
+        for (auto it = tasks_.begin(); it != tasks_.end();) {
+            if (it->second.endedAt != 0)
+                it = tasks_.erase(it);
+            else
+                ++it;
+        }
         return;
     }
     std::deque<SmbTaskState> kept;
@@ -161,6 +168,12 @@ void TaskObserverHub::clearHistory(int64_t beforeTs) {
         if (s.endedAt >= beforeTs) kept.push_back(s);
     }
     history_.swap(kept);
+    for (auto it = tasks_.begin(); it != tasks_.end();) {
+        if (it->second.endedAt != 0 && it->second.endedAt < beforeTs)
+            it = tasks_.erase(it);
+        else
+            ++it;
+    }
 }
 
 }  // namespace react_native_smb

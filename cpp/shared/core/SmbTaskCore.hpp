@@ -32,6 +32,7 @@ class SmbTaskCore {
     void cancel();
     SmbTaskState getState() const;
     std::string getId() const { return id_; }
+    SmbOperatorKind getKind() const { return kind_; }
     SmbTaskStatus getStatus() const { return status_.load(); }
     bool isSettled() const { return settled_.load(std::memory_order_acquire); }
     CancellationToken token() const { return cancel_; }

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "PoolTypes.hpp"
+#include "../util/SmbErrorMapper.hpp"
 
 namespace react_native_smb {
 
@@ -20,6 +21,8 @@ struct ContextRequest {
     std::promise<PoolContextHandle> promise;
     std::atomic<bool> cancelled{false};
     std::atomic<bool> fulfilled{false};
+    std::string errorMessage;
+    int errorCode{static_cast<int>(SmbErrorCode::Unknown)};
 };
 
 using ContextRequestPtr = std::shared_ptr<ContextRequest>;

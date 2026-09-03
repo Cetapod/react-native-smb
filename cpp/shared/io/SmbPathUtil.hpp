@@ -95,6 +95,16 @@ inline std::string convertUriToPath(const std::string& path) {
     return path;
 }
 
+// Same-directory sibling used for atomic download/upload commit.
+// Example: /a/b/photo.jpg + task_1 → /a/b/photo.jpg.task_1.part
+inline std::string tempSiblingPath(const std::string& finalPath, const std::string& taskId) {
+    return finalPath + "." + taskId + ".part";
+}
+
+inline std::string backupSiblingPath(const std::string& finalPath, const std::string& taskId) {
+    return finalPath + "." + taskId + ".bak";
+}
+
 // Build an SmbFileInfo from a stat struct (childCount unknown = -1).
 inline SmbFileInfo makeFileInfo(const struct smb2_stat_64& stat, const std::string& name, const std::string& path) {
     bool isDirectory = (stat.smb2_type & SMB2_TYPE_DIRECTORY) != 0;

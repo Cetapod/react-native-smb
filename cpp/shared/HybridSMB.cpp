@@ -12,6 +12,8 @@
 
 #include "connection/PoolTypes.hpp"
 #include "util/SmbErrorMapper.hpp"
+#include "util/SmbException.hpp"
+#include "util/SmbLog.hpp"
 #include "core/TaskSnapshotCodec.hpp"
 #include "operators/connection/ConnectOperator.hpp"
 #include "operators/connection/ConnectShareOperator.hpp"
@@ -43,9 +45,15 @@ void HybridSMB::releaseTaskRun(const std::shared_ptr<TaskRunState>& state) {
 
 template <typename OpT>
 std::shared_ptr<SmbTask> HybridSMB::createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp, ExecutionLane lane) {
-    auto task = std::make_shared<SmbTask>(taskId, std::move(seedOp), pool_);
+    std::lock_guard<std::mutex> shutdownLock(shutdownMutex_);
+    if (disposed_.load(std::memory_order_acquire)) {
+        SmbException::raise(SmbErrorCode::NotConnected, "SMB client has been destroyed");
+    }
 
-    if (observer_) observer_->track(task);
+    auto task = std::make_shared<SmbTask>(taskId, std::move(seedOp), pool_);
+    if (observer_) {
+        observer_->track(task);
+    }
     {
         std::lock_guard<std::mutex> lk(tasksMutex_);
         tasks_[taskId] = task;
@@ -57,12 +65,15 @@ std::shared_ptr<SmbTask> HybridSMB::createTask(const std::string& taskId, std::u
         ++taskRuns->active;
     }
 
-    auto runBody = [task, taskRuns] {
+    auto* self = this;
+    auto runBody = [self, task, taskId, taskRuns] {
         struct RunCompletionGuard {
             std::shared_ptr<TaskRunState> state;
             ~RunCompletionGuard() { HybridSMB::releaseTaskRun(state); }
         } guard{taskRuns};
         task->start();
+        // Drop the live strong ref once the task is terminal so cancel scans stay O(active).
+        self->forgetTask(taskId);
     };
 
     try {
@@ -73,6 +84,7 @@ std::shared_ptr<SmbTask> HybridSMB::createTask(const std::string& taskId, std::u
         }
     } catch (...) {
         releaseTaskRun(taskRuns);
+        forgetTask(taskId);
         throw;
     }
 
@@ -89,27 +101,62 @@ HybridSMB::HybridSMB() : HybridObject(NAME) {
 }
 
 HybridSMB::~HybridSMB() {
+    shutdownImpl();
+}
+
+void HybridSMB::shutdownImpl() {
+    std::lock_guard<std::mutex> shutdownLock(shutdownMutex_);
+    if (disposed_.exchange(true, std::memory_order_acq_rel)) {
+        std::unique_lock<std::mutex> lock(taskRuns_->mutex);
+        taskRuns_->cv.wait(lock, [&] { return taskRuns_->active == 0; });
+        return;
+    }
+
     try {
-        pool_->disconnect();
+        cancelAllTasksExcept("__destroy__");
     } catch (...) {
     }
-    std::unique_lock<std::mutex> lock(taskRuns_->mutex);
-    taskRuns_->cv.wait(lock, [&] { return taskRuns_->active == 0; });
-    lock.unlock();
+    try {
+        if (pool_) pool_->disconnect();
+    } catch (...) {
+    }
+    {
+        std::unique_lock<std::mutex> lock(taskRuns_->mutex);
+        taskRuns_->cv.wait(lock, [&] { return taskRuns_->active == 0; });
+    }
     lifecycleExecutor_.shutdown();
 }
 
-void HybridSMB::cancelAllTasksExcept(const std::string& taskId) {
+std::shared_ptr<Promise<void>> HybridSMB::destroy() {
+    auto self = shared_cast<HybridSMB>();
+    return Promise<void>::async([self]() { self->shutdownImpl(); });
+}
+
+void HybridSMB::forgetTask(const std::string& taskId) {
+    {
+        std::lock_guard<std::mutex> lk(tasksMutex_);
+        tasks_.erase(taskId);
+    }
+    if (observer_) observer_->untrack(taskId);
+}
+
+void HybridSMB::cancelTasksMatching(const std::function<bool(const std::shared_ptr<SmbTask>&)>& pred, const char* reason) {
     std::vector<std::shared_ptr<SmbTask>> toCancel;
-    toCancel.reserve(tasks_.size());
     {
         std::lock_guard<std::mutex> lock(tasksMutex_);
+        toCancel.reserve(tasks_.size());
         for (const auto& [id, task] : tasks_) {
-            if (id == taskId || task->isSettled()) continue;
+            if (!task || task->isSettled()) continue;
+            if (!pred(task)) continue;
             toCancel.push_back(task);
         }
     }
+    SMB_LOG("%s matched=%zu", reason ? reason : "cancelTasks", toCancel.size());
     for (const auto& task : toCancel) task->cancel();
+}
+
+void HybridSMB::cancelAllTasksExcept(const std::string& taskId) {
+    cancelTasksMatching([&](const std::shared_ptr<SmbTask>& task) { return task->getId() != taskId; }, "cancelAllTasksExcept");
 }
 
 // --- State Checks ---
@@ -198,6 +245,10 @@ void HybridSMB::cancelTask(const std::string& taskId) {
         if (it != tasks_.end()) task = it->second;
     }
     if (task) task->cancel();
+}
+
+void HybridSMB::cancelTransferTasks() {
+    cancelTasksMatching([](const std::shared_ptr<SmbTask>& task) { return isTransferKind(task->getKind()); }, "cancelTransferTasks");
 }
 
 void HybridSMB::resetPool() {
@@ -335,6 +386,7 @@ void HybridSMB::loadHybridMethods() {
         prototype.registerHybridMethod("connectShare", &HybridSMB::connectShare);
         prototype.registerHybridMethod("disconnect", &HybridSMB::disconnect);
         prototype.registerHybridMethod("listShares", &HybridSMB::listShares);
+        prototype.registerHybridMethod("destroy", &HybridSMB::destroy);
 
         // --- Listing & Info ---
         prototype.registerHybridMethod("listDirectory", &HybridSMB::listDirectory);
@@ -360,6 +412,7 @@ void HybridSMB::loadHybridMethods() {
         prototype.registerHybridMethod("getActiveTasks", &HybridSMB::getActiveTasks);
         prototype.registerHybridMethod("getTaskHistory", &HybridSMB::getTaskHistory);
         prototype.registerHybridMethod("cancelTask", &HybridSMB::cancelTask);
+        prototype.registerHybridMethod("cancelTransferTasks", &HybridSMB::cancelTransferTasks);
         prototype.registerHybridMethod("clearTaskHistory", &HybridSMB::clearTaskHistory);
 
         // Debug / instrumentation

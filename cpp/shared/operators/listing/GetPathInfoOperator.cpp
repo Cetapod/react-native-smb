@@ -1,11 +1,10 @@
 #include "GetPathInfoOperator.hpp"
 
-#include <stdexcept>
-
 #include "../../connection/SmbConnectionPool.hpp"
 #include "../../io/SmbDirScan.hpp"
 #include "../../io/SmbPathUtil.hpp"
 #include "../../io/SmbSecurityQuery.hpp"
+#include "../../util/SmbException.hpp"
 
 namespace react_native_smb {
 
@@ -19,21 +18,17 @@ void GetPathInfoOperator::run() {
     const CancellationToken token = cancelToken();
     bool found = false;
     SmbFileInfo info;
-    try {
-        std::vector<SmbFileInfo> siblings = handle.submitSync([&](smb2_context* ctx) { return listOnCtx(ctx, parentPath, true, 1, token); });
-        for (const auto& item : siblings) {
-            if (item.name == fileName) {
-                info = item;
-                found = true;
-                break;
-            }
+    std::vector<SmbFileInfo> siblings = handle.submitSync([&](smb2_context* ctx) { return listOnCtx(ctx, parentPath, true, 1, token); });
+    for (const auto& item : siblings) {
+        if (item.name == fileName) {
+            info = item;
+            found = true;
+            break;
         }
-    } catch (...) {
-        throw std::runtime_error("Failed to get path info for '" + path_ + "': File not found.");
     }
 
     if (!found) {
-        throw std::runtime_error("Failed to get path info for '" + path_ + "': File not found.");
+        SmbException::raise(SmbErrorCode::NotFound, "Failed to get path info for '" + path_ + "': File not found.");
     }
 
     try {

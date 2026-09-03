@@ -8,6 +8,8 @@
 #include <memory>
 #include <stdexcept>
 
+#include "../util/SmbException.hpp"
+
 namespace react_native_smb {
 
 namespace {
@@ -21,8 +23,13 @@ struct ShareEnumContext {
     bool finished;
 };
 
-[[noreturn]] void throwError(const std::string& /*taskId*/, const std::string& message, int /*code*/) {
-    throw std::runtime_error(message);
+[[noreturn]] void throwError(const std::string& /*taskId*/, const std::string& message, int code) {
+    SmbException::raise(code, message);
+}
+
+[[noreturn]] void rethrowOrUnknown(const std::string& taskId, const std::exception& e) {
+    if (dynamic_cast<const SmbException*>(&e) != nullptr) throw;
+    throwError(taskId, e.what(), static_cast<int>(SmbErrorCode::Unknown));
 }
 }  // namespace
 
@@ -76,7 +83,7 @@ void SmbConnectionManager::initialize(const std::string& url, const SmbCredentia
         currentUrl_ = "smb://" + serverName_;
         isInitialized_ = true;
     } catch (const std::exception& e) {
-        throwError(taskId, e.what(), static_cast<int>(SmbErrorCode::Unknown));
+        rethrowOrUnknown(taskId, e);
     }
 }
 
@@ -127,7 +134,7 @@ void SmbConnectionManager::connect(const std::string& url, const SmbCredentials&
         currentShareName_ = shareName;
         currentUrl_ = url;
     } catch (const std::exception& e) {
-        throwError(taskId, e.what(), static_cast<int>(SmbErrorCode::Unknown));
+        rethrowOrUnknown(taskId, e);
     }
 }
 
@@ -161,7 +168,7 @@ void SmbConnectionManager::connectShare(const std::string& share, const std::str
 
         currentUrl_ = "smb://" + serverName_ + "/" + share;
     } catch (const std::exception& e) {
-        throwError(taskId, e.what(), static_cast<int>(SmbErrorCode::Unknown));
+        rethrowOrUnknown(taskId, e);
     }
 }
 
@@ -179,7 +186,7 @@ void SmbConnectionManager::disconnect(const std::string& taskId) {
         currentShareName_.clear();
         currentUrl_.clear();
     } catch (const std::exception& e) {
-        throwError(taskId, e.what(), static_cast<int>(SmbErrorCode::Unknown));
+        rethrowOrUnknown(taskId, e);
     }
 }
 
@@ -328,7 +335,7 @@ void SmbConnectionManager::checkAndInitialize(const std::string& taskId) {
 
         isInitialized_ = true;
     } catch (const std::exception& e) {
-        throwError(taskId, e.what(), static_cast<int>(SmbErrorCode::Unknown));
+        rethrowOrUnknown(taskId, e);
     }
 }
 
@@ -364,7 +371,7 @@ void SmbConnectionManager::checkAndConnect(const std::string& taskId) {
         currentUrl_ = "smb://" + serverName_ + "/" + currentShareName_;
 
     } catch (const std::exception& e) {
-        throwError(taskId, e.what(), static_cast<int>(SmbErrorCode::Unknown));
+        rethrowOrUnknown(taskId, e);
     }
 }
 
@@ -382,7 +389,7 @@ void SmbConnectionManager::initializeContext() {
 
     auto* raw_context = smb2_init_context();
     if (!raw_context) {
-        throw std::runtime_error("Fatal Error: Failed to initialize libsmb2 context. System may be out of memory.");
+        SmbException::raise(SmbErrorCode::Io, "Fatal Error: Failed to initialize libsmb2 context. System may be out of memory.");
     }
 
     context_ = std::shared_ptr<smb2_context>(raw_context, [](smb2_context* ctx) {

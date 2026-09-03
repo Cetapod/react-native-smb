@@ -68,7 +68,7 @@ const firstDacl = files[0]?.securityDescriptor?.dacl;
 | `subscribePoolInfo(cb)` | `string` | Listener ID |
 | `unsubscribePoolInfo(id)` | `void` | |
 | `resetPool()` | `void` | Disconnect all slots |
-| `dispose()` | `void` | Tear down transfer store |
+| `destroy()` | `Promise<void>` | Cancel tasks, disconnect pool, stop transfer tracking; not reusable |
 
 See [Connection pool](./ARCHITECTURE.md).
 

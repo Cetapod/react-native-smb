@@ -4,6 +4,7 @@
 #include <chrono>
 
 #include "../operators/OperatorBase.hpp"
+#include "../util/SmbErrorMapper.hpp"
 #include "../util/SmbLog.hpp"
 
 namespace react_native_smb {
@@ -34,6 +35,7 @@ SmbTaskState SmbTaskCore::getState() const {
 void SmbTaskCore::setPaths(std::string source, std::string destination) {
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
+        if (settled_.load(std::memory_order_acquire)) return;
         sourcePath_ = std::move(source);
         destinationPath_ = std::move(destination);
         updatedAt_ = nowMs();
@@ -42,15 +44,16 @@ void SmbTaskCore::setPaths(std::string source, std::string destination) {
 }
 
 void SmbTaskCore::addExpectedBytes(int64_t bytes) {
+    if (settled_.load(std::memory_order_acquire)) return;
     totalBytes_.fetch_add(bytes);
     notifyListeners();
 }
 
 void SmbTaskCore::onOpStatus(size_t opIndex, SmbTaskStatus s, const std::string& error, int code) {
-    if (settled_.load(std::memory_order_acquire) && s == SmbTaskStatus::Success) return;
-    if (status_.load() == SmbTaskStatus::Cancelled && s == SmbTaskStatus::Success) return;
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
+        if (settled_.load(std::memory_order_acquire)) return;
+        if (status_.load() == SmbTaskStatus::Cancelled && s == SmbTaskStatus::Success) return;
         if (opIndex < opProgress_.size()) opProgress_[opIndex].status = s;
         if (s == SmbTaskStatus::Error && status_.load() != SmbTaskStatus::Error) {
             errorMessage_ = error;
@@ -63,6 +66,7 @@ void SmbTaskCore::onOpStatus(size_t opIndex, SmbTaskStatus s, const std::string&
 void SmbTaskCore::onOpProgress(size_t opIndex, double done, double total) {
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
+        if (settled_.load(std::memory_order_acquire)) return;
         if (opIndex < opProgress_.size()) {
             opProgress_[opIndex].done = static_cast<int64_t>(done);
             opProgress_[opIndex].total = static_cast<int64_t>(total);
@@ -86,6 +90,7 @@ void SmbTaskCore::unsubscribe(const std::string& id) {
 
 void SmbTaskCore::publishResult(std::any value,
                                 std::function<jsi::Value(jsi::Runtime&, const std::any&)> converter) {
+    if (settled_.load(std::memory_order_acquire)) return;
     resultValue_ = std::move(value);
     resultConverter_ = std::move(converter);
 }
@@ -102,18 +107,24 @@ jsi::Value SmbTaskCore::getResultValue(jsi::Runtime& runtime) const {
 std::future<void> SmbTaskCore::completionFuture() { return done_.get_future(); }
 
 void SmbTaskCore::markPending() {
-    if (settled_.load(std::memory_order_acquire)) return;
-    status_ = SmbTaskStatus::Pending;
-    if (startedAt_ == 0) startedAt_ = nowMs();
-    updatedAt_ = nowMs();
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        if (settled_.load(std::memory_order_acquire)) return;
+        status_ = SmbTaskStatus::Pending;
+        if (startedAt_ == 0) startedAt_ = nowMs();
+        updatedAt_ = nowMs();
+    }
     notifyListeners();
 }
 
 void SmbTaskCore::markRunning() {
-    if (settled_.load(std::memory_order_acquire)) return;
-    status_ = SmbTaskStatus::Running;
-    if (startedAt_ == 0) startedAt_ = nowMs();
-    updatedAt_ = nowMs();
+    {
+        std::lock_guard<std::mutex> lk(stateMutex_);
+        if (settled_.load(std::memory_order_acquire)) return;
+        status_ = SmbTaskStatus::Running;
+        if (startedAt_ == 0) startedAt_ = nowMs();
+        updatedAt_ = nowMs();
+    }
     notifyListeners();
 }
 
@@ -168,23 +179,30 @@ void SmbTaskCore::writeToSnapshot(SmbTaskState& out) const {
 void SmbTaskCore::notifyListeners() {
     SmbTaskState snap;
     writeToSnapshot(snap);
-    std::lock_guard<std::mutex> lk(listenersMutex_);
-    for (auto& [id, fn] : listeners_) {
-        if (fn) fn(snap);
+    std::vector<SnapshotListener> listenersCopy;
+    {
+        std::lock_guard<std::mutex> lk(listenersMutex_);
+        listenersCopy.reserve(listeners_.size());
+        for (auto& [id, fn] : listeners_) {
+            if (fn) listenersCopy.push_back(fn);
+        }
+    }
+    for (auto& fn : listenersCopy) {
+        try {
+            if (fn) fn(snap);
+        } catch (...) {
+        }
     }
 }
 
 void SmbTaskCore::maybeSettle() {
+    // pending_ == 0. Cancel intent wins unless an op already recorded Error/Cancelled.
     if (cancel_.cancelled()) {
         settle(SmbTaskStatus::Cancelled, "", static_cast<int>(SmbErrorCode::Cancelled));
         return;
     }
     const auto s = status_.load();
-    // Running: normal IO ops. Idle: pool-direct ops (initialize/connect/listShares) that never
-    // pass through OperatorBase::requestContext and therefore never call markPending/markRunning.
-    if (s == SmbTaskStatus::Running || s == SmbTaskStatus::Idle) {
-        settle(SmbTaskStatus::Success, "", static_cast<int>(SmbErrorCode::Unknown));
-    } else {
+    if (s == SmbTaskStatus::Error || s == SmbTaskStatus::Cancelled) {
         bool expected = false;
         if (settled_.compare_exchange_strong(expected, true)) {
             {
@@ -194,24 +212,36 @@ void SmbTaskCore::maybeSettle() {
             notifyListeners();
             done_.set_value();
         }
+        return;
     }
+    settle(SmbTaskStatus::Success, "", static_cast<int>(SmbErrorCode::Unknown));
 }
 
 void SmbTaskCore::settle(SmbTaskStatus finalStatus, const std::string& error, int code) {
+    // Cancellation intent beats a late Success attempt (closes cancel/maybeSettle race).
+    SmbTaskStatus status = finalStatus;
+    std::string msg = error;
+    int errCode = code;
+    if (status == SmbTaskStatus::Success && cancel_.cancelled()) {
+        status = SmbTaskStatus::Cancelled;
+        msg.clear();
+        errCode = static_cast<int>(SmbErrorCode::Cancelled);
+    }
+
     // First settle wins — later op throws or emitStatus cannot override terminal state.
     bool expected = false;
     if (!settled_.compare_exchange_strong(expected, true)) return;
-    SMB_LOG("Task settle id=%s status=%s code=%d%s%s", id_.c_str(), statusName(finalStatus), code,
-            error.empty() ? "" : " error=", error.empty() ? "" : error.c_str());
+    SMB_LOG("Task settle id=%s kind=%s status=%s code=%d%s%s", id_.c_str(), operationName(kind_), statusName(status), errCode,
+            msg.empty() ? "" : " error=", msg.empty() ? "" : msg.c_str());
 
-    status_ = finalStatus;
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
-        if (!error.empty()) errorMessage_ = error;
-        errorCode_ = code;
+        status_ = status;
+        if (!msg.empty()) errorMessage_ = msg;
+        errorCode_ = errCode;
         endedAt_ = nowMs();
         updatedAt_ = endedAt_;
-        if (finalStatus == SmbTaskStatus::Success) {
+        if (status == SmbTaskStatus::Success) {
             if (isDeterminate(kind_) && totalBytes_.load() > 0) bytesDone_ = totalBytes_.load();
             progress_ = isDeterminate(kind_) ? 1.0 : 0.0;
             etaSeconds_ = 0.0;

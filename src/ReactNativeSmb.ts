@@ -232,10 +232,22 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
   cancelTask(taskId: string): void;
 
   /**
+   * Cancels unsettled transfer tasks (download/upload/copy/duplicate), including queued pool waiters.
+   * Does not cancel connection, listing, or mutation tasks.
+   */
+  cancelTransferTasks(): void;
+
+  /**
    * Clear task history
    * @param beforeTs Clear tasks that ended before this timestamp (0 = clear all)
    */
   clearTaskHistory(beforeTs: bigint): void;
+
+  /**
+   * Tear down this SMB client: cancel tasks, disconnect the pool, wait for workers.
+   * The instance is not reusable afterwards — call `SMB()` for a new client.
+   */
+  destroy(): Promise<void>;
 
   // Debug / instrumentation
 
