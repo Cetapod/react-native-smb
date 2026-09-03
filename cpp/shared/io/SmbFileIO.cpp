@@ -158,8 +158,6 @@ struct AsyncReadState {
     bool isDone() const { return errored || bytesCompleted >= fileSize; }
 
     void markCancelled() {
-        SMB_LOG("Download markCancelled inFlight=%d bytesCompleted=%lld/%lld", inFlight, static_cast<long long>(bytesCompleted),
-                static_cast<long long>(fileSize));
         fail(SmbErrorCode::Cancelled, "Download cancelled");
     }
 
@@ -280,8 +278,6 @@ struct AsyncReadState {
             }
             uint32_t tailLen = slot.requested - slot.received;
             uint64_t tailOffset = slot.baseOffset + slot.received;
-            SMB_LOG("AsyncReadState: short read got=%d requested=%u at offset=%llu — re-issuing tail %u bytes at %llu", status, slot.requested, static_cast<unsigned long long>(slot.baseOffset),
-                    tailLen, static_cast<unsigned long long>(tailOffset));
             int ret = smb2_pread_async(st->ctx, st->fh, slot.buf.data() + slot.received, tailLen, tailOffset, readCb, st);
             if (ret < 0) {
                 const std::string msg = std::string("Download Failed: short-read recovery smb2_pread_async: ") + smb2_get_error(st->ctx);
@@ -393,8 +389,6 @@ struct AsyncWriteState {
     bool isDone() const { return errored || bytesCompleted >= fileSize; }
 
     void markCancelled() {
-        SMB_LOG("Upload markCancelled inFlight=%d bytesCompleted=%lld/%lld", inFlight, static_cast<long long>(bytesCompleted),
-                static_cast<long long>(fileSize));
         fail(SmbErrorCode::Cancelled, "Upload cancelled");
     }
 
@@ -497,8 +491,6 @@ struct AsyncWriteState {
             }
             uint32_t tailLen = slot.requested - slot.written;
             uint64_t tailOffset = slot.baseOffset + slot.written;
-            SMB_LOG("AsyncWriteState: short write got=%d requested=%u at offset=%llu — re-issuing tail %u bytes at %llu", status, slot.requested, static_cast<unsigned long long>(slot.baseOffset),
-                    tailLen, static_cast<unsigned long long>(tailOffset));
             int ret = smb2_pwrite_async(st->ctx, st->fh, slot.buf.data() + slot.written, tailLen, tailOffset, writeCb, st);
             if (ret < 0) {
                 const std::string msg = std::string("Upload Failed: short-write recovery smb2_pwrite_async: ") + smb2_get_error(st->ctx);
@@ -647,7 +639,6 @@ PollLoopResult drivePollLoop(smb2_context* ctx, DoneFn&& done, TickFn&& tick, Pr
 
 template <typename StateT>
 void invalidateTransferContext(SmbConnectionManager& manager, StateT& state) {
-    SMB_LOG("transfer invalidateContext inFlight=%d", state.inFlight);
     manager.invalidateContext();
     state.ctx = nullptr;
     if constexpr (requires { state.fh; }) {
@@ -769,8 +760,6 @@ int64_t smbReadFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std
         [&]() { return state.bytesCompleted; });
 
     if (state.isStuck()) {
-        SMB_LOG("smbReadFileAsync: stuck-state safety net triggered (bytesCompleted=%lld fileSize=%lld)", static_cast<long long>(state.bytesCompleted),
-                static_cast<long long>(state.fileSize));
         state.fail(SmbErrorCode::Io, "Download Failed: I/O pipeline stalled (unrecoverable short transfer)");
     }
     if (pollResult == PollLoopResult::TimedOut && !state.errored) {
@@ -787,7 +776,6 @@ int64_t smbReadFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std
     abortTransferTransport(pollResult, manager, state);
 
     if (state.errored) {
-        SMB_LOG("smbReadFileAsync errored code=%d inFlight=%d msg=%s", static_cast<int>(state.errorCode), state.inFlight, state.errorMsg.c_str());
         state.cleanup();
         removeTempOnly();
         raiseTransferError(state.errorCode, state.errorMsg);
@@ -887,7 +875,7 @@ void commitRemoteRename(smb2_context* ctx, const std::string& tempPath, const st
     }
 
     if (smb2_unlink(ctx, backupPath.c_str()) < 0) {
-        SMB_LOG("commitRemoteRename: best-effort backup unlink failed path=%s err=%s", backupPath.c_str(), smb2_get_error(ctx));
+        SMB_LOG_WARN("Upload backup cleanup failed");
     }
 }
 
@@ -996,8 +984,6 @@ int64_t smbWriteFileAsync(void* ctxVoid, SmbConnectionManager& manager, const st
         [&]() { return state.bytesCompleted; });
 
     if (state.isStuck()) {
-        SMB_LOG("smbWriteFileAsync: stuck-state safety net triggered (bytesCompleted=%lld fileSize=%lld)", static_cast<long long>(state.bytesCompleted),
-                static_cast<long long>(state.fileSize));
         state.fail(SmbErrorCode::Io, "Upload Failed: I/O pipeline stalled (unrecoverable short transfer)");
     }
     if (pollResult == PollLoopResult::TimedOut && !state.errored) {
@@ -1014,7 +1000,6 @@ int64_t smbWriteFileAsync(void* ctxVoid, SmbConnectionManager& manager, const st
     abortTransferTransport(pollResult, manager, state);
 
     if (state.errored) {
-        SMB_LOG("smbWriteFileAsync errored code=%d inFlight=%d msg=%s", static_cast<int>(state.errorCode), state.inFlight, state.errorMsg.c_str());
         state.cleanupOnError();
         raiseTransferError(state.errorCode, state.errorMsg);
     }
@@ -1216,8 +1201,6 @@ struct AsyncCopyState {
             }
             uint32_t tailLen = slot.requested - slot.read;
             uint64_t tailOffset = slot.baseOffset + slot.read;
-            SMB_LOG("AsyncCopyState: short read got=%d requested=%u at offset=%llu — re-issuing tail %u bytes at %llu", status, slot.requested, static_cast<unsigned long long>(slot.baseOffset),
-                    tailLen, static_cast<unsigned long long>(tailOffset));
             int ret = smb2_pread_async(st->ctx, st->srcFh, slot.buf.data() + slot.read, tailLen, tailOffset, readCb, &st->cbDatas[slotIdx]);
             if (ret < 0) {
                 const std::string msg = std::string("Copy Failed: short-read recovery smb2_pread_async: ") + smb2_get_error(st->ctx);
@@ -1260,8 +1243,6 @@ struct AsyncCopyState {
                 slot.state = ChunkSlot::Idle;
                 return;
             }
-            SMB_LOG("AsyncCopyState: short write got=%d total=%u at offset=%llu — re-issuing tail %u bytes", status, slot.read, static_cast<unsigned long long>(slot.baseOffset),
-                    slot.read - slot.written);
             st->submitWriteForSlot(slotIdx);
             return;
         }
@@ -1390,7 +1371,6 @@ int64_t smbCopyFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std
         },
         [&]() { return state.bytesCopied; });
     if (state.isStuck()) {
-        SMB_LOG("smbCopyFileAsync: stuck-state safety net triggered (bytesCopied=%lld fileSize=%lld)", static_cast<long long>(state.bytesCopied), static_cast<long long>(state.fileSize));
         state.fail(SmbErrorCode::Io, "Copy Failed: I/O pipeline stalled (unrecoverable short transfer)");
     }
     if (pollResult == PollLoopResult::TimedOut && !state.errored) {
@@ -1407,7 +1387,6 @@ int64_t smbCopyFileAsync(void* ctxVoid, SmbConnectionManager& manager, const std
     abortTransferTransport(pollResult, manager, state);
 
     if (state.errored) {
-        SMB_LOG("smbCopyFileAsync errored code=%d inFlight=%d msg=%s", static_cast<int>(state.errorCode), state.inFlight, state.errorMsg.c_str());
         state.cleanupOnError();
         raiseTransferError(state.errorCode, state.errorMsg);
     }

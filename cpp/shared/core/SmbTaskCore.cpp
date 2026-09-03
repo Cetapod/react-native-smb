@@ -231,9 +231,6 @@ void SmbTaskCore::settle(SmbTaskStatus finalStatus, const std::string& error, in
     // First settle wins — later op throws or emitStatus cannot override terminal state.
     bool expected = false;
     if (!settled_.compare_exchange_strong(expected, true)) return;
-    SMB_LOG("Task settle id=%s kind=%s status=%s code=%d%s%s", id_.c_str(), operationName(kind_), statusName(status), errCode,
-            msg.empty() ? "" : " error=", msg.empty() ? "" : msg.c_str());
-
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
         status_ = status;
@@ -246,6 +243,13 @@ void SmbTaskCore::settle(SmbTaskStatus finalStatus, const std::string& error, in
             progress_ = isDeterminate(kind_) ? 1.0 : 0.0;
             etaSeconds_ = 0.0;
         }
+    }
+    if (status == SmbTaskStatus::Error) {
+        SMB_LOG_ERROR("Task %s (%s) failed (code=%d)", id_.c_str(), operationName(kind_), errCode);
+    } else if (status == SmbTaskStatus::Cancelled) {
+        SMB_LOG_INFO("Task %s (%s) cancelled", id_.c_str(), operationName(kind_));
+    } else {
+        SMB_LOG_INFO("Task %s (%s) completed", id_.c_str(), operationName(kind_));
     }
     notifyListeners();
     done_.set_value();

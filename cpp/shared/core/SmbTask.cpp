@@ -8,7 +8,6 @@
 #include "../util/SmbErrorMapper.hpp"
 #include "../util/SmbException.hpp"
 #include "TaskSnapshotCodec.hpp"
-#include "../util/SmbLog.hpp"
 
 namespace react_native_smb {
 

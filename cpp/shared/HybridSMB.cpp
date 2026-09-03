@@ -140,7 +140,7 @@ void HybridSMB::forgetTask(const std::string& taskId) {
     if (observer_) observer_->untrack(taskId);
 }
 
-void HybridSMB::cancelTasksMatching(const std::function<bool(const std::shared_ptr<SmbTask>&)>& pred, const char* reason) {
+void HybridSMB::cancelTasksMatching(const std::function<bool(const std::shared_ptr<SmbTask>&)>& pred) {
     std::vector<std::shared_ptr<SmbTask>> toCancel;
     {
         std::lock_guard<std::mutex> lock(tasksMutex_);
@@ -151,12 +151,12 @@ void HybridSMB::cancelTasksMatching(const std::function<bool(const std::shared_p
             toCancel.push_back(task);
         }
     }
-    SMB_LOG("%s matched=%zu", reason ? reason : "cancelTasks", toCancel.size());
+    if (!toCancel.empty()) SMB_LOG_INFO("Cancelling %zu pending task(s)", toCancel.size());
     for (const auto& task : toCancel) task->cancel();
 }
 
 void HybridSMB::cancelAllTasksExcept(const std::string& taskId) {
-    cancelTasksMatching([&](const std::shared_ptr<SmbTask>& task) { return task->getId() != taskId; }, "cancelAllTasksExcept");
+    cancelTasksMatching([&](const std::shared_ptr<SmbTask>& task) { return task->getId() != taskId; });
 }
 
 // --- State Checks ---
@@ -248,7 +248,7 @@ void HybridSMB::cancelTask(const std::string& taskId) {
 }
 
 void HybridSMB::cancelTransferTasks() {
-    cancelTasksMatching([](const std::shared_ptr<SmbTask>& task) { return isTransferKind(task->getKind()); }, "cancelTransferTasks");
+    cancelTasksMatching([](const std::shared_ptr<SmbTask>& task) { return isTransferKind(task->getKind()); });
 }
 
 void HybridSMB::resetPool() {

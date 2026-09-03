@@ -47,7 +47,7 @@ class HybridSMB : public ReactNativeSmb {
     std::mutex shutdownMutex_;
 
     void cancelAllTasksExcept(const std::string& taskId);
-    void cancelTasksMatching(const std::function<bool(const std::shared_ptr<SmbTask>&)>& pred, const char* reason);
+    void cancelTasksMatching(const std::function<bool(const std::shared_ptr<SmbTask>&)>& pred);
     void forgetTask(const std::string& taskId);
     void shutdownImpl();
     static void releaseTaskRun(const std::shared_ptr<TaskRunState>& state);

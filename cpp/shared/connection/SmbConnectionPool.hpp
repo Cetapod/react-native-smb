@@ -28,7 +28,7 @@ namespace react_native_smb {
  *   Op::requestContext → Interactive-first FIFO queue → exclusive slot assignment
  */
 class SmbConnectionPool {
-    public:
+public:
     using PoolObserver = std::function<void(const std::vector<PoolSlotInfo>&)>;
     using CancelTasksExcept = std::function<void(const std::string&)>;
 
@@ -64,35 +64,49 @@ class SmbConnectionPool {
     size_t addObserver(const PoolObserver& observer);
     void removeObserver(size_t id);
 
-   private:
+private:
     enum class PoolLifecycle { Running, Closing, Disconnected };
 
+    // Request scheduling
     void tryAssignNext();
     size_t findIdleSlot(AcquireMode mode) const;
     size_t maybeGrowSlot();
     bool slotNeedsActivate(const PoolSlot& slot) const;
-    PoolSlot& primarySlot();
-    const PoolSlot& primarySlot() const;
+
+    // Lifecycle
     void drainCurrentWork(const std::string& excludeTaskId, const CancellationToken& cancel);
     void disconnectAllSlots(const std::string& taskId);
     void clearConfiguration();
+
+    // Slot access
+    PoolSlot& primarySlot();
+    const PoolSlot& primarySlot() const;
+
+    // Observers
     void notifyObservers();
-    mutable std::mutex mutex_;
-    std::mutex lifecycleMutex_;
+
+    // Synchronization
+    mutable std::mutex mutex_;  // Guards pool state below.
+    std::mutex lifecycleMutex_; // Serializes lifecycle transitions.
     std::condition_variable assignCv_;
+
+    // Pool state
     std::vector<PoolSlot> slots_;
     size_t maxConnections_{4};
-    ContextRequestQueue queue_;
-    // Requests currently outside the queue while a slot is being activated.
-    // cancelRequestsForTask must see these so cancellation cannot race past takeNext().
-    std::unordered_map<uint64_t, ContextRequestPtr> activating_;
     PoolLifecycle lifecycle_{PoolLifecycle::Disconnected};
     CancelTasksExcept cancelTasksExcept_;
 
+    // Pending context requests
+    ContextRequestQueue queue_;
+    // Requests outside queue_ while a slot is activating. Cancellation must see them.
+    std::unordered_map<uint64_t, ContextRequestPtr> activating_;
+
+    // Connection configuration
     std::string serverUrl_;
     std::string shareName_;
     std::shared_ptr<SmbCredentials> credentials_;
 
+    // Pool observers
     std::map<size_t, PoolObserver> observers_;
     size_t nextObserverId_{1};
 };

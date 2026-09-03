@@ -19,7 +19,6 @@
 #include "SmbDirScan.hpp"
 #include "SmbPathUtil.hpp"
 #include "SmbTreeOps.hpp"
-#include "../util/SmbLog.hpp"
 
 namespace react_native_smb {
 
@@ -56,12 +55,9 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
 
     if (!isDirectory) {
         sharedLease->submitSync([&](smb2_context* ctx) {
-            SMB_LOG("CopyTree file taskId=%s from=%s to=%s", taskId.c_str(), fromPath.c_str(), toPath.c_str());
             smbCopyFileAsync(ctx, sharedLease->manager(), path_util::normalized(fromPath), path_util::normalized(toPath), totalBytesCopied, totalSize, onProgress, cancel);
         });
         if (onProgress) onProgress(static_cast<double>(totalSize), static_cast<double>(totalSize));
-        SMB_LOG("CopyTree finish taskId=%s copiedBytes=%lld totalBytes=%lld cancelled=%d", taskId.c_str(), static_cast<long long>(*totalBytesCopied),
-                static_cast<long long>(totalSize), cancel.cancelled() ? 1 : 0);
         return;
     }
 
@@ -97,7 +93,6 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
     });
 
     if (cancel.cancelled() || files.empty()) {
-        SMB_LOG("CopyTree finish taskId=%s reason=%s", taskId.c_str(), cancel.cancelled() ? "cancelled" : "empty");
         if (onProgress) onProgress(static_cast<double>(totalSize), static_cast<double>(totalSize));
         return;
     }
@@ -105,13 +100,10 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
     for (const auto& job : files) {
         if (cancel.cancelled()) break;
         sharedLease->submitSync([&](smb2_context* ctx) {
-            SMB_LOG("CopyTree file taskId=%s from=%s to=%s size=%lld", taskId.c_str(), job.src.c_str(), job.dst.c_str(), static_cast<long long>(job.size));
             smbCopyFileAsync(ctx, sharedLease->manager(), path_util::normalized(job.src), path_util::normalized(job.dst), totalBytesCopied, totalSize, onProgress, cancel);
         });
     }
 
-    SMB_LOG("CopyTree finish taskId=%s copiedBytes=%lld totalBytes=%lld cancelled=%d", taskId.c_str(), static_cast<long long>(*totalBytesCopied),
-            static_cast<long long>(totalSize), cancel.cancelled() ? 1 : 0);
     if (onProgress) onProgress(static_cast<double>(totalSize), static_cast<double>(totalSize));
 }
 
