@@ -18,17 +18,15 @@ Pod::Spec.new do |s|
   ]
 
   s.header_mappings_dir = "cpp"
-  s.public_header_files = "cpp/**/*.hpp"
-
   # React Native dependencies
   s.dependency "React"
   s.dependency "React-Core"
   s.dependency "NitroModules"
 
-  # Include paths for libsmb2 headers (XCFramework provides its own headers)
-  s.public_header_files = [
-    "cpp/**/*.hpp"
-  ]
+  # Transfer and tree orchestration headers are implementation details.
+  s.public_header_files = Dir["cpp/**/*.hpp"].reject do |header|
+    header.start_with?("cpp/shared/io/transfer/") || header == "cpp/shared/io/SmbCopyTree.hpp"
+  end
 
   # Compiler settings
   s.requires_arc = true

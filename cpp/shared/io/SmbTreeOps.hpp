@@ -4,12 +4,12 @@
 #include <smb2/smb2.h>
 
 #include <cctype>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include "../ReactNativeSmb.hpp"  // SmbFileInfo
 #include "../core/CancellationToken.hpp"
+#include "../util/SmbException.hpp"
 #include "SmbDirScan.hpp"
 #include "SmbPathUtil.hpp"
 
@@ -58,7 +58,8 @@ inline int64_t calculateTotalSize(smb2_context* ctx, const std::string& path, bo
 }
 
 // Generate a unique "<base> copy[ N]<ext>" name not present in parentPath.
-inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& parentPath, const std::string& originalName, const CancellationToken& cancel) {
+inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& parentPath, const std::string& originalName,
+                                          const CancellationToken& cancel, int& nextIndex) {
     size_t lastDot = originalName.find_last_of('.');
     std::string baseName = (lastDot != std::string::npos && lastDot > 0) ? originalName.substr(0, lastDot) : originalName;
     std::string extension = (lastDot != std::string::npos && lastDot > 0) ? originalName.substr(lastDot) : "";
@@ -88,13 +89,13 @@ inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& 
     existingNames.reserve(existingFiles.size());
     for (const auto& item : existingFiles) existingNames.push_back(item.name);
 
-    int counter = 1;
-    while (true) {
-        std::stringstream ss;
-        ss << baseName << " copy";
-        if (counter > 1) ss << " " << counter;
-        ss << extension;
-        std::string candidate = ss.str();
+    constexpr int kMaxCopyNameIndex = 10000;
+    for (int counter = nextIndex; counter <= kMaxCopyNameIndex; ++counter) {
+        std::string candidate = baseName + " copy";
+        if (counter > 1) {
+            candidate += " " + std::to_string(counter);
+        }
+        candidate += extension;
 
         bool found = false;
         for (const auto& existing : existingNames) {
@@ -103,9 +104,14 @@ inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& 
                 break;
             }
         }
-        if (!found) return candidate;
-        if (++counter > 10000) return candidate;  // safety break
+        if (!found) {
+            nextIndex = counter + 1;
+            return candidate;
+        }
     }
+
+    SmbException::raise(SmbErrorCode::AlreadyExists,
+                        "Copy Failed: no available duplicate name for '" + originalName + "'");
 }
 
 }  // namespace tree_ops
