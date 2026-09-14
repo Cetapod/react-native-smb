@@ -132,11 +132,15 @@ try {
   if (error instanceof SmbTaskError) {
     if (error.code === SmbError.NotFound) { /* ... */ }
     if (error.code === SmbError.AccessDenied) { /* ... */ }
+    if (error.code === SmbError.AuthenticationFailed) { /* prompt for credentials */ }
+    if (error.code === SmbError.NotConnected || error.code === SmbError.TimedOut) { /* reconnect/retry */ }
   }
 }
 ```
 
 `SmbTaskError` carries `code` (`SmbError` enum) and optional `taskId`.
+
+The task preserves the first causal operation error. Cancellation is returned only when cancellation was observed before another failure. Recursive operations fail rather than silently returning partial results.
 
 ## Lifecycle
 

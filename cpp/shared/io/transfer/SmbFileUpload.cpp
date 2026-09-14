@@ -53,8 +53,8 @@ void commitRemoteRename(smb2_context* ctx, const std::string& temp, const std::s
     if (!remotePathExists(ctx, final)) {
         const int result = smb2_rename(ctx, temp.c_str(), final.c_str());
         if (result < 0) {
-            SmbException::raiseFromErrnoResult(
-                result, std::string("Upload Failed: smb2_rename temp-to-final: ") + smb2_get_error(ctx));
+            SmbException::raiseFromSmb(
+                ctx, result, std::string("Upload Failed: smb2_rename temp-to-final: ") + smb2_get_error(ctx));
         }
         return;
     }
@@ -66,21 +66,20 @@ void commitRemoteRename(smb2_context* ctx, const std::string& temp, const std::s
     }
     const int moved = smb2_rename(ctx, final.c_str(), backup.c_str());
     if (moved < 0) {
-        SmbException::raiseFromErrnoResult(
-            moved, std::string("Upload Failed: could not move existing destination aside: ") + smb2_get_error(ctx));
+        SmbException::raiseFromSmb(
+            ctx, moved, std::string("Upload Failed: could not move existing destination aside: ") + smb2_get_error(ctx));
     }
 
     const int committed = smb2_rename(ctx, temp.c_str(), final.c_str());
     if (committed < 0) {
         const std::string error = smb2_get_error(ctx);
+        const SmbErrorCode committedCode = detail::mapSmbResult(committed, error);
         const int restored = smb2_rename(ctx, backup.c_str(), final.c_str());
         if (restored < 0) {
-            SmbException::raiseFromErrnoResult(committed,
-                                               "Upload Failed: smb2_rename temp-to-final failed (" + error +
+            SmbException::raise(committedCode, "Upload Failed: smb2_rename temp-to-final failed (" + error +
                                                    ") and restore from backup also failed: " + smb2_get_error(ctx));
         }
-        SmbException::raiseFromErrnoResult(committed,
-                                           "Upload Failed: smb2_rename temp-to-final after backup: " + error);
+        SmbException::raise(committedCode, "Upload Failed: smb2_rename temp-to-final after backup: " + error);
     }
     if (smb2_unlink(ctx, backup.c_str()) < 0) SMB_LOG_WARN("Upload backup cleanup failed");
 }

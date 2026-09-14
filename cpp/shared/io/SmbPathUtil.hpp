@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../ReactNativeSmb.hpp"  // SmbFileInfo
+#include "../util/SmbException.hpp"
 
 namespace react_native_smb {
 
@@ -33,7 +34,7 @@ inline std::string normalized(const std::string& path) {
             continue;
         }
         if (component == "..") {
-            if (components.empty()) throw std::invalid_argument("SMB path escapes the share root");
+            if (components.empty()) SmbException::raise(SmbErrorCode::InvalidArgument, "SMB path escapes the share root");
             components.pop_back();
         } else {
             components.push_back(std::move(component));

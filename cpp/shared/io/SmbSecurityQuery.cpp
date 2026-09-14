@@ -3,6 +3,7 @@
 #include <poll.h>
 
 #include <cstddef>
+#include <cerrno>
 #include <cstdint>
 #include <ctime>
 #include <cstring>
@@ -16,6 +17,7 @@
 
 #include "SmbSecurity.hpp"
 #include "../connection/SmbConnection.hpp"
+#include "../util/SmbException.hpp"
 
 namespace react_native_smb {
 
@@ -138,22 +140,26 @@ void pollUntilComplete(smb2_context* ctx, AclQueryContext& context) {
 
     while (!context.finished) {
         pfd.fd = smb2_get_fd(ctx);
-        if (pfd.fd < 0) throw std::runtime_error("ACL Error: Invalid file descriptor from libsmb2. Connection might be broken.");
+        if (pfd.fd < 0) SmbException::raise(SmbErrorCode::NotConnected, "ACL Error: invalid file descriptor from libsmb2");
         pfd.events = smb2_which_events(ctx);
+        pfd.revents = 0;
 
-        if (poll(&pfd, 1, 1000) < 0) throw std::runtime_error("Poll failed during ACL query");
+        if (poll(&pfd, 1, 1000) < 0) {
+            if (errno == EINTR) continue;
+            SmbException::raiseFromErrno(errno, "ACL Error: poll failed");
+        }
 
         if (pfd.revents == 0) {
-            if (++timeoutCount >= kMaxTimeouts) throw std::runtime_error("ACL query timed out");
+            if (++timeoutCount >= kMaxTimeouts) SmbException::raise(SmbErrorCode::TimedOut, "ACL query timed out");
             continue;
         }
         timeoutCount = 0;
 
         if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            throw std::runtime_error("ACL Error: Socket poll failure (revents=" + std::to_string(pfd.revents) + ").");
+            SmbException::raise(SmbErrorCode::NotConnected, "ACL Error: socket poll failure (revents=" + std::to_string(pfd.revents) + ")");
         }
         if (smb2_service(ctx, pfd.revents) < 0) {
-            throw std::runtime_error("ACL Error: smb2_service failed: " + std::string(smb2_get_error(ctx)));
+            SmbException::raiseFromSmb(ctx, -1, "ACL Error: smb2_service failed: " + std::string(smb2_get_error(ctx)), SmbErrorCode::NotConnected);
         }
     }
 }
@@ -161,24 +167,25 @@ void pollUntilComplete(smb2_context* ctx, AclQueryContext& context) {
 }  // namespace
 
 SmbSecurityDescriptor querySecurityDescriptorOnCtx(smb2_context* ctx, const std::string& path, SmbConnectionManager& manager) {
-    if (!ctx) throw std::runtime_error("ACL Operation Failed: SMB2 context is invalid. Please reconnect.");
+    if (!ctx) SmbException::raise(SmbErrorCode::NotConnected, "ACL Operation Failed: SMB2 context is invalid. Please reconnect.");
 
     auto queryContext = std::make_unique<AclQueryContext>();
 
     if (sendAclQuery(ctx, path, *queryContext) != 0) {
-        throw std::runtime_error("ACL Operation Failed: Could not send ACL query for '" + path + "'. Error: " + std::string(smb2_get_error(ctx)));
+        SmbException::raiseFromSmb(ctx, -1, "ACL Operation Failed: Could not send ACL query for '" + path + "'. Error: " + std::string(smb2_get_error(ctx)));
     }
     try {
         pollUntilComplete(ctx, *queryContext);
-    } catch (const std::exception& e) {
-        const std::string message = e.what();
-        manager.invalidateContext();
-        throw SmbSecurityQueryTransportError(message);
     } catch (...) {
         manager.invalidateContext();
-        throw SmbSecurityQueryTransportError("Unknown transport error during ACL query");
+        throw;
     }
-    if (!queryContext->error.empty()) throw std::runtime_error(queryContext->error);
+    if (!queryContext->error.empty()) {
+        const int status = queryContext->createStatus != 0 ? queryContext->createStatus : queryContext->queryStatus;
+        throw SmbException(static_cast<SmbErrorCode>(SmbErrorMapper::fromSmbFailure(
+                               0, status, queryContext->error)),
+                           queryContext->error);
+    }
 
     return queryContext->result;
 }

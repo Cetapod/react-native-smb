@@ -126,14 +126,11 @@ inline std::vector<SmbFileInfo> listDirectoryParallel(SmbConnectionPool& pool, c
                         abortFromWorker();
                         return;
                     }
-                    if (item.isRoot) {
-                        std::lock_guard<std::mutex> lock(mu);
-                        if (!rootError) rootError = std::current_exception();
-                        drainQueueLocked();
-                        finishItemLocked();
-                        return;
-                    }
-                    if (item.out) item.out->clear();
+                    std::lock_guard<std::mutex> lock(mu);
+                    if (!rootError) rootError = std::current_exception();
+                    drainQueueLocked();
+                    finishItemLocked();
+                    return;
                 }
 
                 {

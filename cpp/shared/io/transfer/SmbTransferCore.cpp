@@ -37,14 +37,7 @@ void TransferCore::emitProgress(int64_t current, int64_t total) {
 }
 
 SmbErrorCode mapSmbResult(int result, const std::string& message) {
-    int mapped = SmbErrorMapper::fromErrnoResult(result);
-    if (mapped == static_cast<int>(SmbErrorCode::Unknown)) {
-        mapped = SmbErrorMapper::fromErrnoOrMessage(0, message);
-    }
-    if (mapped == static_cast<int>(SmbErrorCode::Unknown)) {
-        mapped = static_cast<int>(SmbErrorCode::Io);
-    }
-    return static_cast<SmbErrorCode>(mapped);
+    return static_cast<SmbErrorCode>(SmbErrorMapper::fromSmbFailure(result, 0, message));
 }
 
 SmbErrorCode mapErrnoOrIo(int error) {
@@ -99,12 +92,24 @@ PollLoopResult runTransfer(TransferCore& core, SmbConnectionManager& manager, co
             if (errno == EINTR) {
                 continue;
             }
+            core.failure.fail(mapErrnoOrIo(errno), failurePrefix + ": poll failed");
             result = PollLoopResult::PollFailed;
             break;
         }
-        if (pollResult > 0 && smb2_service(core.ctx, pfd.revents) < 0) {
-            result = PollLoopResult::PollFailed;
-            break;
+        if (pollResult > 0) {
+            if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                core.failure.fail(SmbErrorCode::NotConnected, failurePrefix + ": socket closed");
+                result = PollLoopResult::PollFailed;
+                break;
+            }
+            if (smb2_service(core.ctx, pfd.revents) < 0) {
+                const std::string message = failurePrefix + ": poll/service: " + smb2_get_error(core.ctx);
+                core.failure.fail(static_cast<SmbErrorCode>(SmbErrorMapper::fromSmbFailure(
+                                      -1, smb2_get_nterror(core.ctx), message, SmbErrorCode::NotConnected)),
+                                  message);
+                result = PollLoopResult::PollFailed;
+                break;
+            }
         }
     }
     if (stuck()) {
@@ -116,9 +121,6 @@ PollLoopResult runTransfer(TransferCore& core, SmbConnectionManager& manager, co
         else {
             core.failure.fail(SmbErrorCode::TimedOut, failurePrefix + ": transfer timed out (no progress)");
         }
-    }
-    if (result == PollLoopResult::PollFailed && !core.failure.errored) {
-        core.failure.fail(SmbErrorCode::Io, failurePrefix + ": poll/service: " + smb2_get_error(core.ctx));
     }
     if (result != PollLoopResult::Done) {
         // The manager owns transport teardown; never unwind callback stack state first.

@@ -72,24 +72,16 @@ void SmbTask::launchOp(size_t opIndex) {
         try {
             op->start(self.get(), pool.get(), self->cancel_, opIndex);
         } catch (const SmbException& e) {
-            if (e.code() == SmbErrorCode::Cancelled || self->cancel_.cancelled()) {
+            if (e.code() == SmbErrorCode::Cancelled) {
                 self->SmbTaskCore::cancel();
             } else {
                 self->settle(SmbTaskStatus::Error, e.what(), e.codeInt());
             }
         } catch (const std::exception& e) {
-            if (self->cancel_.cancelled()) {
-                self->SmbTaskCore::cancel();
-            } else {
-                const int code = SmbErrorMapper::fromErrnoOrMessage(0, e.what());
-                self->settle(SmbTaskStatus::Error, e.what(), code);
-            }
+            const int code = SmbErrorMapper::fromErrnoOrMessage(0, e.what());
+            self->settle(SmbTaskStatus::Error, e.what(), code);
         } catch (...) {
-            if (self->cancel_.cancelled()) {
-                self->SmbTaskCore::cancel();
-            } else {
-                self->settle(SmbTaskStatus::Error, "unknown error", static_cast<int>(SmbErrorCode::Unknown));
-            }
+            self->settle(SmbTaskStatus::Error, "unknown error", static_cast<int>(SmbErrorCode::Unknown));
         }
         self->onOpFinished();
     }).detach();

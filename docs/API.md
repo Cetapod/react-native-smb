@@ -90,7 +90,26 @@ See [Connection pool](./ARCHITECTURE.md).
 
 `SmbTaskError` with `code: SmbError` and optional `taskId`.
 
-`SmbError`: `Unknown`, `Cancelled`, `InvalidArgument`, `NotFound`, `AlreadyExists`, `AccessDenied`, `NotDirectory`, `IsDirectory`, `DirectoryNotEmpty`, `NotConnected`, `ConnectionRefused`, `TimedOut`, `Busy`, `NoSpace`, `Io`.
+| Code | `SmbError` | Meaning |
+| ---- | ---------- | ------- |
+| 0 | `Unknown` | An unexpected internal or malformed bridge error. SMB operation failures use a specific code. |
+| 1 | `Cancelled` | The caller cancelled before the operation failed. |
+| 100 | `InvalidArgument` | Invalid URL, path, or operation argument. |
+| 101 | `NotFound` | The requested remote item does not exist. |
+| 102 | `AlreadyExists` | A destination or duplicate name is already present. |
+| 103 | `AccessDenied` | The authenticated account lacks access to the item or share. |
+| 104 | `NotDirectory` | A directory operation targeted a file. |
+| 105 | `IsDirectory` | A file operation targeted a directory. |
+| 106 | `DirectoryNotEmpty` | A directory could not be removed because it contains items. |
+| 200 | `NotConnected` | The SMB transport closed or is unavailable. |
+| 201 | `ConnectionRefused` | The server refused the connection. |
+| 202 | `TimedOut` | The SMB operation made no progress before its timeout. |
+| 203 | `AuthenticationFailed` | Credentials or account state prevented authentication. |
+| 300 | `Busy` | The item is locked or otherwise busy. |
+| 301 | `NoSpace` | Local or remote storage is full. |
+| 302 | `Io` | Other local or remote I/O failure. |
+
+Recursive listing, copy, duplicate, and delete fail on the first descendant failure; they never return a silent partial success. Security descriptors are omitted only when the account is denied descriptor access.
 
 ### Hooks
 

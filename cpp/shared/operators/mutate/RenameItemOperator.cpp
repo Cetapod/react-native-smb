@@ -3,16 +3,15 @@
 #include <smb2/libsmb2.h>
 #include <smb2/smb2.h>
 
-#include <stdexcept>
-
 #include "../../connection/SmbConnectionPool.hpp"
 #include "../../io/SmbPathUtil.hpp"
+#include "../../util/SmbException.hpp"
 
 namespace react_native_smb {
 
 void RenameItemOperator::run() {
     if (newName_.empty() || newName_.find('/') != std::string::npos || newName_.find('\\') != std::string::npos) {
-        throw std::runtime_error("Rename Failed: invalid new name '" + newName_ + "'");
+        SmbException::raise(SmbErrorCode::InvalidArgument, "Rename Failed: invalid new name '" + newName_ + "'");
     }
 
 
@@ -27,7 +26,7 @@ void RenameItemOperator::run() {
     handle.submitSync([&](smb2_context* ctx) {
         const int r = smb2_rename(ctx, normCurrent.c_str(), newPath.c_str());
         if (r < 0) {
-            throw std::runtime_error("Rename Failed: Could not rename '" + currentPath_ + "' to '" + newName_ + "'. Error: " + smb2_get_error(ctx));
+            SmbException::raiseFromSmb(ctx, r, "Rename Failed: Could not rename '" + currentPath_ + "' to '" + newName_ + "'. Error: " + smb2_get_error(ctx));
         }
     });
 

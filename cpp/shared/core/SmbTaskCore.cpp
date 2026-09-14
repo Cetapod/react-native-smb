@@ -11,6 +11,35 @@ namespace react_native_smb {
 
 namespace jsi = facebook::jsi;
 
+namespace {
+
+std::string sanitizedErrorMessage(std::string message) {
+    size_t scheme = 0;
+    while ((scheme = message.find("smb://", scheme)) != std::string::npos) {
+        const size_t authorityStart = scheme + 6;
+        const size_t authorityEnd = message.find_first_of("/ ?\n\r", authorityStart);
+        const size_t at = message.find('@', authorityStart);
+        if (at != std::string::npos && (authorityEnd == std::string::npos || at < authorityEnd)) {
+            message.replace(authorityStart, at - authorityStart + 1, "<credentials>@");
+            scheme = authorityStart + 14;
+        } else {
+            scheme = authorityStart;
+        }
+    }
+
+    constexpr const char* kPasswordKey = "password=";
+    size_t password = 0;
+    while ((password = message.find(kPasswordKey, password)) != std::string::npos) {
+        const size_t valueStart = password + 9;
+        const size_t valueEnd = message.find_first_of("& \n\r'\"", valueStart);
+        message.replace(valueStart, (valueEnd == std::string::npos ? message.size() : valueEnd) - valueStart, "<redacted>");
+        password = valueStart + 10;
+    }
+    return message;
+}
+
+}  // namespace
+
 int64_t SmbTaskCore::nowMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch())
@@ -196,11 +225,6 @@ void SmbTaskCore::notifyListeners() {
 }
 
 void SmbTaskCore::maybeSettle() {
-    // pending_ == 0. Cancel intent wins unless an op already recorded Error/Cancelled.
-    if (cancel_.cancelled()) {
-        settle(SmbTaskStatus::Cancelled, "", static_cast<int>(SmbErrorCode::Cancelled));
-        return;
-    }
     const auto s = status_.load();
     if (s == SmbTaskStatus::Error || s == SmbTaskStatus::Cancelled) {
         bool expected = false;
@@ -212,6 +236,10 @@ void SmbTaskCore::maybeSettle() {
             notifyListeners();
             done_.set_value();
         }
+        return;
+    }
+    if (cancel_.cancelled()) {
+        settle(SmbTaskStatus::Cancelled, "", static_cast<int>(SmbErrorCode::Cancelled));
         return;
     }
     settle(SmbTaskStatus::Success, "", static_cast<int>(SmbErrorCode::Unknown));
@@ -245,7 +273,8 @@ void SmbTaskCore::settle(SmbTaskStatus finalStatus, const std::string& error, in
         }
     }
     if (status == SmbTaskStatus::Error) {
-        SMB_LOG_ERROR("Task %s (%s) failed (code=%d)", id_.c_str(), operationName(kind_), errCode);
+        const std::string logMessage = sanitizedErrorMessage(msg);
+        SMB_LOG_ERROR("Task %s (%s) failed (code=%d): %s", id_.c_str(), operationName(kind_), errCode, logMessage.c_str());
     } else if (status == SmbTaskStatus::Cancelled) {
         SMB_LOG_INFO("Task %s (%s) cancelled", id_.c_str(), operationName(kind_));
     } else {

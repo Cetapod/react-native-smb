@@ -4,19 +4,19 @@
 #include <smb2/smb2.h>
 
 #include <algorithm>
-#include <stdexcept>
 #include <vector>
 
 #include "../../ReactNativeSmb.hpp"
 #include "../../io/SmbPathUtil.hpp"
 #include "../../io/SmbTreeOps.hpp"
+#include "../../util/SmbException.hpp"
 
 namespace react_native_smb {
 
 void DeleteItemOperator::run() {
     const CancellationToken token = cancelToken();
     const std::string norm = path_util::normalized(path_);
-    if (norm.empty()) throw std::invalid_argument("Delete Failed: refusing to delete the share root");
+    if (norm.empty()) SmbException::raise(SmbErrorCode::InvalidArgument, "Delete Failed: refusing to delete the share root");
     setSourceDestination(norm, "");
 
     bool isDirectory = false;
@@ -24,8 +24,9 @@ void DeleteItemOperator::run() {
         auto handle = requestContext(AcquireMode::Metadata);
         handle.submitSync([&](smb2_context* ctx) {
             struct smb2_stat_64 st;
-            if (smb2_stat(ctx, norm.c_str(), &st) < 0) {
-                throw std::runtime_error("Delete Failed: Could not stat '" + path_ + "'. Error: " + smb2_get_error(ctx));
+            const int result = smb2_stat(ctx, norm.c_str(), &st);
+            if (result < 0) {
+                SmbException::raiseFromSmb(ctx, result, "Delete Failed: Could not stat '" + path_ + "'. Error: " + smb2_get_error(ctx));
             }
             isDirectory = (st.smb2_type & SMB2_TYPE_DIRECTORY) != 0;
         });
@@ -35,7 +36,7 @@ void DeleteItemOperator::run() {
         auto handle = requestContext(AcquireMode::Metadata);
         handle.submitSync([&](smb2_context* ctx) {
             const int r = smb2_unlink(ctx, norm.c_str());
-            if (r < 0) throw std::runtime_error("Failed to delete file '" + path_ + "': " + smb2_get_error(ctx));
+            if (r < 0) SmbException::raiseFromSmb(ctx, r, "Failed to delete file '" + path_ + "': " + smb2_get_error(ctx));
         });
         emitStatus(SmbTaskStatus::Success);
         return;
@@ -67,7 +68,7 @@ void DeleteItemOperator::run() {
                 if (isCancelled()) return;
                 std::string n = path_util::normalized(item.path);
                 const int r = smb2_unlink(ctx, n.c_str());
-                if (r < 0) throw std::runtime_error("Recursive Delete Failed: Could not delete file '" + item.path + "'. Error: " + smb2_get_error(ctx));
+                if (r < 0) SmbException::raiseFromSmb(ctx, r, "Recursive Delete Failed: Could not delete file '" + item.path + "'. Error: " + smb2_get_error(ctx));
             }
         });
     }
@@ -84,10 +85,10 @@ void DeleteItemOperator::run() {
                 if (isCancelled()) return;
                 std::string n = path_util::normalized(item.path);
                 const int r = smb2_rmdir(ctx, n.c_str());
-                if (r < 0) throw std::runtime_error("Recursive Delete Failed: Could not delete sub-directory '" + item.path + "'. Error: " + smb2_get_error(ctx));
+                if (r < 0) SmbException::raiseFromSmb(ctx, r, "Recursive Delete Failed: Could not delete sub-directory '" + item.path + "'. Error: " + smb2_get_error(ctx));
             }
             const int rootR = smb2_rmdir(ctx, norm.c_str());
-            if (rootR < 0) throw std::runtime_error("Delete Failed: Could not delete directory '" + path_ + "'. Error: " + smb2_get_error(ctx));
+            if (rootR < 0) SmbException::raiseFromSmb(ctx, rootR, "Delete Failed: Could not delete directory '" + path_ + "'. Error: " + smb2_get_error(ctx));
         });
     }
 

@@ -4,6 +4,8 @@
 #include <string>
 #include <utility>
 
+#include <smb2/libsmb2.h>
+
 #include "SmbErrorMapper.hpp"
 
 namespace react_native_smb {
@@ -30,12 +32,14 @@ class SmbException : public std::runtime_error {
         throw SmbException(code, std::move(message));
     }
 
-    [[noreturn]] static void raiseFromErrnoResult(int resultCode, std::string message) {
-        throw SmbException(SmbErrorMapper::fromErrnoResult(resultCode), std::move(message));
-    }
-
     [[noreturn]] static void raiseFromErrno(int errnoCode, std::string message) {
         throw SmbException(SmbErrorMapper::fromErrno(errnoCode), std::move(message));
+    }
+
+    [[noreturn]] static void raiseFromSmb(smb2_context* context, int resultCode, std::string message,
+                                          SmbErrorCode fallback = SmbErrorCode::Io) {
+        const int ntStatus = context ? smb2_get_nterror(context) : 0;
+        throw SmbException(SmbErrorMapper::fromSmbFailure(resultCode, ntStatus, message, fallback), std::move(message));
     }
 
    private:

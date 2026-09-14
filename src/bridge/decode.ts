@@ -1,5 +1,6 @@
 import {
   SmbOperatorKind,
+  SmbError,
   SlotState,
   TaskStatus,
   type PoolInfo,
@@ -46,6 +47,11 @@ function enumFromInt<T extends number>(value: number, enumObj: Record<string, nu
   throw new Error(`Invalid enum value: ${value}`);
 }
 
+function errorFromInt(value: number): SmbError {
+  const valid = Object.values(SmbError).filter((v): v is SmbError => typeof v === 'number');
+  return valid.includes(value as SmbError) ? (value as SmbError) : SmbError.Unknown;
+}
+
 export function shapeTaskSnapshot(raw: Record<string, string>): SmbTaskState | null {
   if (raw.exists === '0') return null;
 
@@ -64,7 +70,7 @@ export function shapeTaskSnapshot(raw: Record<string, string>): SmbTaskState | n
     etaSeconds: parseFloatField(raw, 'etaSeconds'),
     sourcePath: raw.sourcePath ?? '',
     destinationPath: raw.destinationPath ?? '',
-    errorCode: parseIntOptional(raw, 'errorCode'),
+    errorCode: errorFromInt(parseIntOptional(raw, 'errorCode')),
     errorMessage: raw.errorMessage ?? '',
     startedAt: parseIntOptional(raw, 'startedAt'),
     updatedAt: parseIntOptional(raw, 'updatedAt'),

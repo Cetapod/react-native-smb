@@ -28,6 +28,7 @@ export enum SmbError {
   NotConnected = 200,
   ConnectionRefused = 201,
   TimedOut = 202,
+  AuthenticationFailed = 203,
   Busy = 300,
   NoSpace = 301,
   Io = 302,

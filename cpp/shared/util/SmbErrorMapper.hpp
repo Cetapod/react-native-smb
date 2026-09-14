@@ -25,6 +25,7 @@ enum class SmbErrorCode : int {
     NotConnected = 200,
     ConnectionRefused = 201,
     TimedOut = 202,
+    AuthenticationFailed = 203,
 
     Busy = 300,
     NoSpace = 301,
@@ -51,6 +52,24 @@ class SmbErrorMapper {
         return fromMessage(errorMessage);
     }
 
+    // libsmb2 results are usually negative errno values, but some APIs return
+    // a generic -1. Prefer the SMB status and diagnostic before treating it as errno.
+    static int fromSmbFailure(int resultCode, int ntStatus, const std::string& errorMessage,
+                              SmbErrorCode fallback = SmbErrorCode::Io) {
+        const int mappedFromStatus = fromNtStatus(static_cast<uint32_t>(ntStatus));
+        if (mappedFromStatus != static_cast<int>(SmbErrorCode::Unknown)) return mappedFromStatus;
+
+        const int mappedFromMessage = fromMessage(errorMessage);
+        if (mappedFromMessage != static_cast<int>(SmbErrorCode::Unknown)) return mappedFromMessage;
+
+        // -1 is a generic failure from smb2_service(), not -EPERM.
+        if (resultCode != -1 && resultCode != 0) {
+            const int mappedFromErrno = fromErrnoResult(resultCode);
+            if (mappedFromErrno != static_cast<int>(SmbErrorCode::Unknown)) return mappedFromErrno;
+        }
+        return static_cast<int>(fallback);
+    }
+
     static int fromErrno(int errnoCode) {
         switch (errnoCode) {
             case 0:
@@ -75,6 +94,15 @@ class SmbErrorMapper {
             case ENOTCONN:
             case EHOSTUNREACH:
             case EPIPE:
+#ifdef ECONNRESET
+            case ECONNRESET:
+#endif
+#ifdef ECONNABORTED
+            case ECONNABORTED:
+#endif
+#ifdef ENETUNREACH
+            case ENETUNREACH:
+#endif
 #ifdef ENETRESET
             case ENETRESET:
 #endif
@@ -118,7 +146,14 @@ class SmbErrorMapper {
             return static_cast<int>(SmbErrorCode::NotFound);
         }
 
-        if (containsAny(upper, {"STATUS_ACCESS_DENIED", "STATUS_LOGON_FAILURE", "ACCESS_DENIED", "PERMISSION DENIED"})) {
+        if (containsAny(upper, {"STATUS_NO_SUCH_USER", "STATUS_WRONG_PASSWORD", "STATUS_LOGON_FAILURE", "STATUS_ACCOUNT_RESTRICTION",
+                                "STATUS_INVALID_LOGON_HOURS", "STATUS_INVALID_WORKSTATION", "STATUS_PASSWORD_EXPIRED",
+                                "STATUS_ACCOUNT_DISABLED", "STATUS_ACCOUNT_EXPIRED", "STATUS_PASSWORD_MUST_CHANGE",
+                                "STATUS_ACCOUNT_LOCKED_OUT", "AUTHENTICATION FAILED", "INVALID PASSWORD", "INVALID USERNAME"})) {
+            return static_cast<int>(SmbErrorCode::AuthenticationFailed);
+        }
+
+        if (containsAny(upper, {"STATUS_ACCESS_DENIED", "ACCESS_DENIED", "PERMISSION DENIED"})) {
             return static_cast<int>(SmbErrorCode::AccessDenied);
         }
 
@@ -138,16 +173,18 @@ class SmbErrorMapper {
             return static_cast<int>(SmbErrorCode::Cancelled);
         }
 
-        if (containsAny(upper, {"STATUS_CONNECTION_DISCONNECTED", "STATUS_NETWORK_NAME_DELETED", "BROKEN PIPE", "CLOSING OR DISCONNECTED", "CONTEXT REQUEST FAILED"})) {
+        if (containsAny(upper, {"STATUS_IO_TIMEOUT", "TIMED OUT", "TIMEOUT EXPIRED"})) {
+            return static_cast<int>(SmbErrorCode::TimedOut);
+        }
+
+        if (containsAny(upper, {"STATUS_CONNECTION_DISCONNECTED", "STATUS_NETWORK_NAME_DELETED", "BROKEN PIPE", "CLOSING OR DISCONNECTED",
+                                "CONTEXT REQUEST FAILED", "POLLHUP", "POLLERR", "POLLNVAL", "SOCKET ERROR", "NO CONNECTION EXISTS",
+                                "CONNECTION RESET", "CONNECTION ABORTED", "NETWORK IS UNREACHABLE"})) {
             return static_cast<int>(SmbErrorCode::NotConnected);
         }
 
         if (contains(upper, "STATUS_CONNECTION_REFUSED")) {
             return static_cast<int>(SmbErrorCode::ConnectionRefused);
-        }
-
-        if (containsAny(upper, {"STATUS_IO_TIMEOUT", "TIMED OUT"})) {
-            return static_cast<int>(SmbErrorCode::TimedOut);
         }
 
         if (containsAny(upper, {"STATUS_SHARING_VIOLATION", "RESOURCE BUSY"})) {
@@ -173,8 +210,19 @@ class SmbErrorMapper {
             case 0xC0000035:  // STATUS_OBJECT_NAME_COLLISION
                 return static_cast<int>(SmbErrorCode::AlreadyExists);
             case 0xC0000022:  // STATUS_ACCESS_DENIED
-            case 0xC000006D:  // STATUS_LOGON_FAILURE
                 return static_cast<int>(SmbErrorCode::AccessDenied);
+            case 0xC0000064:  // STATUS_NO_SUCH_USER
+            case 0xC000006A:  // STATUS_WRONG_PASSWORD
+            case 0xC000006D:  // STATUS_LOGON_FAILURE
+            case 0xC000006E:  // STATUS_ACCOUNT_RESTRICTION
+            case 0xC000006F:  // STATUS_INVALID_LOGON_HOURS
+            case 0xC0000070:  // STATUS_INVALID_WORKSTATION
+            case 0xC0000071:  // STATUS_PASSWORD_EXPIRED
+            case 0xC0000072:  // STATUS_ACCOUNT_DISABLED
+            case 0xC0000193:  // STATUS_ACCOUNT_EXPIRED
+            case 0xC0000224:  // STATUS_PASSWORD_MUST_CHANGE
+            case 0xC0000234:  // STATUS_ACCOUNT_LOCKED_OUT
+                return static_cast<int>(SmbErrorCode::AuthenticationFailed);
             case 0xC0000103:  // STATUS_NOT_A_DIRECTORY
                 return static_cast<int>(SmbErrorCode::NotDirectory);
             case 0xC00000BA:  // STATUS_FILE_IS_A_DIRECTORY
@@ -183,6 +231,9 @@ class SmbErrorMapper {
                 return static_cast<int>(SmbErrorCode::DirectoryNotEmpty);
             case 0xC00000B5:  // STATUS_IO_TIMEOUT
                 return static_cast<int>(SmbErrorCode::TimedOut);
+            case 0xC000020C:  // STATUS_CONNECTION_DISCONNECTED
+            case 0xC00000C9:  // STATUS_NETWORK_NAME_DELETED
+                return static_cast<int>(SmbErrorCode::NotConnected);
             case 0xC000007F:  // STATUS_DISK_FULL
                 return static_cast<int>(SmbErrorCode::NoSpace);
             case 0xC00000E9:  // STATUS_UNEXPECTED_IO_ERROR

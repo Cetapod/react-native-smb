@@ -19,40 +19,35 @@ namespace react_native_smb {
 namespace tree_ops {
 
 // Depth-first collect of every descendant (children appended before parent so
-// callers can rmdir deepest-first). Skips inaccessible sub-dirs.
+// callers can rmdir deepest-first). Any descendant failure aborts the operation.
 inline void collectAllItems(smb2_context* ctx, const std::string& path, std::vector<SmbFileInfo>& allItems, const CancellationToken& cancel) {
-    try {
-        std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, false, 0, cancel);
-        for (const auto& item : contents) {
-            if (item.isDirectory) collectAllItems(ctx, item.path, allItems, cancel);
-            allItems.push_back(item);
-        }
-    } catch (const std::exception&) {
-        // Permission errors on sub-dirs: skip; parent rmdir reports "not empty".
+    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, false, 0, cancel);
+    for (const auto& item : contents) {
+        if (item.isDirectory) collectAllItems(ctx, item.path, allItems, cancel);
+        allItems.push_back(item);
     }
 }
 
-// Recursively total the byte size of a path. Returns partial size on errors.
+// Recursively total the byte size of a path. Any descendant failure aborts the operation.
 inline int64_t calculateTotalSize(smb2_context* ctx, const std::string& path, bool recursive, const CancellationToken& cancel) {
     const std::string norm = path_util::normalized(path);
     struct smb2_stat_64 stat;
-    if (smb2_stat(ctx, norm.c_str(), &stat) < 0) return 0;
+    const int result = smb2_stat(ctx, norm.c_str(), &stat);
+    if (result < 0) {
+        SmbException::raiseFromSmb(ctx, result, "Copy Failed: Could not stat source '" + path + "'. Error: " + smb2_get_error(ctx));
+    }
 
     const bool isDirectory = (stat.smb2_type & SMB2_TYPE_DIRECTORY) != 0;
     if (!isDirectory) return static_cast<int64_t>(stat.smb2_size);
     if (!recursive) return 0;
 
     int64_t total = 0;
-    try {
-        std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, false, 0, cancel);
-        for (const auto& item : contents) {
-            if (item.isDirectory)
-                total += calculateTotalSize(ctx, item.path, true, cancel);
-            else
-                total += item.size;
-        }
-    } catch (const std::exception&) {
-        // Ignore inaccessible directories; return partial size.
+    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, false, 0, cancel);
+    for (const auto& item : contents) {
+        if (item.isDirectory)
+            total += calculateTotalSize(ctx, item.path, true, cancel);
+        else
+            total += item.size;
     }
     return total;
 }

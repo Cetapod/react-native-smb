@@ -1,73 +1,78 @@
-const lower = (error) => (error && error.message ? String(error.message).toLowerCase() : '');
+import { SmbError } from '@cetapod/react-native-smb';
 
-export const isAccessDeniedError = (error) => {
-  const m = lower(error);
-  if (!m) return false;
-  return m.includes('access_denied') || m.includes('access denied') || m.includes('status_access_denied') || m.includes('0xc0000022');
+const DEFAULT_FRIENDLY = {
+  title: 'Error',
+  message: 'An unknown error occurred',
 };
 
-const isConnectionError = (error) => {
-  const m = lower(error);
-  if (!m) return false;
-  return m.includes('connection') || m.includes('connect') || m.includes('network') || m.includes('timeout');
+const errorCode = (error) => error?.code;
+
+const isError = (code) => (error) => errorCode(error) === code;
+
+export const isAccessDeniedError = isError(SmbError.AccessDenied);
+
+const STATIC_FRIENDLY = {
+  [SmbError.AuthenticationFailed]: {
+    title: 'Authentication Failed',
+    message:
+      'The username or password is incorrect.\n\nPlease check:\n• Username is spelled correctly\n• Password is correct\n• Caps Lock is off',
+  },
+  [SmbError.NotConnected]: {
+    title: 'Not Connected',
+    message:
+      'The SMB connection is closed or unavailable.\n\nPlease check:\n• You are connected to the server\n• The connection was not interrupted\n• Try reconnecting before retrying the operation',
+  },
+  [SmbError.ConnectionRefused]: {
+    title: 'Connection Refused',
+    message:
+      'The server refused the connection.\n\nPlease check:\n• Server address is correct\n• Server is online and accessible\n• Firewall settings allow SMB (port 445)',
+  },
+  [SmbError.TimedOut]: {
+    title: 'Timed Out',
+    message:
+      'The operation made no progress before its timeout.\n\nPlease check:\n• Network connection is stable\n• Server is responding\n• Try again with a smaller operation or longer timeout',
+  },
 };
 
-const isAuthenticationError = (error) => {
-  const m = lower(error);
-  if (!m) return false;
-  return m.includes('logon failure') || m.includes('invalid username') || m.includes('invalid password') || m.includes('authentication') || m.includes('0xc000006d') || m.includes('0xc000006e');
-};
-
-const friendly = (error, context = '') => {
-  if (!error) return { title: 'Error', message: 'An unknown error occurred' };
-  const message = error.message || String(error);
-
-  if (isAccessDeniedError(error)) {
+const CONTEXTUAL_FRIENDLY = {
+  [SmbError.AccessDenied]: (context) => {
     const ctx = context ? ` accessing ${context}` : '';
     return {
       title: 'Access Denied',
       message: `You don't have permission${ctx}.\n\nPossible solutions:\n• Check if your user account has the required permissions\n• Try using an administrator account\n• Contact your system administrator for access`,
     };
-  }
+  },
+  [SmbError.NotFound]: (context) => ({
+    title: 'Not Found',
+    message: `The requested ${context || 'item'} was not found.\n\nIt may have been moved or deleted.`,
+  }),
+};
 
-  if (isAuthenticationError(error)) {
-    return {
-      title: 'Authentication Failed',
-      message: 'The username or password is incorrect.\n\nPlease check:\n• Username is spelled correctly\n• Password is correct\n• Caps Lock is off',
-    };
-  }
+const getFriendlyError = (error, context = '') => {
+  if (!error) return DEFAULT_FRIENDLY;
 
-  if (isConnectionError(error)) {
-    return {
-      title: 'Connection Failed',
-      message: 'Cannot connect to the server.\n\nPlease check:\n• Server address is correct\n• Server is online and accessible\n• Network connection is working\n• Firewall settings allow SMB (port 445)',
-    };
-  }
+  const code = errorCode(error);
+  const contextual = CONTEXTUAL_FRIENDLY[code];
+  if (contextual) return contextual(context);
 
-  if (message.includes('IPC$')) {
-    return {
-      title: 'Share Enumeration Failed',
-      message: 'Cannot list available shares.\n\nThis usually means:\n• Your account lacks administrative privileges\n• The server restricts IPC$ access\n\nTry connecting directly to a known share name instead.',
-    };
-  }
+  const staticMessage = STATIC_FRIENDLY[code];
+  if (staticMessage) return staticMessage;
 
-  if (message.includes('not found') || message.includes('0xc0000034')) {
-    return {
-      title: 'Not Found',
-      message: `The requested ${context || 'item'} was not found.\n\nIt may have been moved or deleted.`,
-    };
-  }
-
-  return { title: 'Operation Failed', message };
+  return {
+    title: 'Operation Failed',
+    message: error.message || String(error),
+  };
 };
 
 export const handleSMBError = (error, operation, context, showAlert) => {
   console.error(`[SMB Error] ${operation}:`, {
+    code: error?.code ?? SmbError.Unknown,
     message: error?.message || String(error),
     context,
     timestamp: new Date().toISOString(),
   });
-  const f = friendly(error, context);
-  if (showAlert) showAlert(f.title, f.message);
-  return f;
+
+  const friendly = getFriendlyError(error, context);
+  if (showAlert) showAlert(friendly.title, friendly.message);
+  return friendly;
 };

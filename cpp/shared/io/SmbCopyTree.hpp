@@ -6,7 +6,6 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -36,8 +35,8 @@ inline CopyTreeSourceInfo inspectCopyTreeSource(MetadataContextLease& lease, con
         smb2_stat_64 st{};
         const int result = smb2_stat(ctx, normalizedPath.c_str(), &st);
         if (result < 0) {
-            SmbException::raiseFromErrnoResult(
-                result, "Copy Failed: Could not stat source '" + fromPath + "'. Error: " + smb2_get_error(ctx));
+            SmbException::raiseFromSmb(
+                ctx, result, "Copy Failed: Could not stat source '" + fromPath + "'. Error: " + smb2_get_error(ctx));
         }
         source.isDirectory = (st.smb2_type & SMB2_TYPE_DIRECTORY) != 0;
         source.totalSize = tree_ops::calculateTotalSize(ctx, normalizedPath, source.isDirectory && recursive, cancel);
@@ -55,7 +54,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
     const std::string normFrom = path_util::normalized(fromPath);
     const std::string normTo = path_util::normalized(toPath);
     if ((normFrom.empty() && !normTo.empty()) || path_util::isDescendant(normFrom, normTo)) {
-        throw std::invalid_argument("Copy Failed: destination cannot be inside the source directory");
+        SmbException::raise(SmbErrorCode::InvalidArgument, "Copy Failed: destination cannot be inside the source directory");
     }
 
     std::optional<MetadataContextLease> ownedLease;
@@ -107,7 +106,8 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         }
         const int mk = smb2_mkdir(ctx, normToRoot.c_str());
         if (mk < 0) {
-            SmbException::raiseFromErrnoResult(
+            SmbException::raiseFromSmb(
+                ctx,
                 mk, "Failed to create destination directory: " + std::string(smb2_get_error(ctx)));
         }
         try {
@@ -129,7 +129,8 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
                     std::string normDest = path_util::normalized(destItem);
                     const int r = smb2_mkdir(ctx, normDest.c_str());
                     if (r < 0) {
-                        SmbException::raiseFromErrnoResult(
+                        SmbException::raiseFromSmb(
+                            ctx,
                             r, "Failed to create destination directory: " + std::string(smb2_get_error(ctx)));
                     }
                     walk(item.path, destItem);

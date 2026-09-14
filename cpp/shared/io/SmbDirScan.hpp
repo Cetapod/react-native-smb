@@ -3,7 +3,6 @@
 #include <smb2/libsmb2.h>
 #include <smb2/smb2.h>
 
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -11,6 +10,7 @@
 #include "../core/CancellationToken.hpp"
 #include "SmbPathUtil.hpp"
 #include "SmbSecurityQuery.hpp"
+#include "../util/SmbException.hpp"
 
 namespace react_native_smb {
 
@@ -23,7 +23,7 @@ inline std::vector<SmbFileInfo> scanDirectoryOnCtx(smb2_context* ctx, const std:
 
     smb2dir* dir = smb2_opendir(ctx, norm.c_str());
     if (!dir) {
-        throw std::runtime_error(std::string("List Directory Failed: Could not open directory '") + path + "'. Error: " + smb2_get_error(ctx));
+        SmbException::raiseFromSmb(ctx, 0, std::string("List Directory Failed: Could not open directory '") + path + "'. Error: " + smb2_get_error(ctx));
     }
 
     try {
@@ -50,6 +50,13 @@ inline std::vector<SmbFileInfo> scanDirectoryOnCtx(smb2_context* ctx, const std:
         if (cancel.cancelled()) return {};
         smb2dir* sub = smb2_opendir(ctx, path_util::normalized(item.path).c_str());
         if (!sub) {
+            const std::string message = std::string("List Directory Failed: Could not count child directory '") + item.path +
+                                        "'. Error: " + smb2_get_error(ctx);
+            const auto code = static_cast<SmbErrorCode>(
+                SmbErrorMapper::fromSmbFailure(0, smb2_get_nterror(ctx), message));
+            if (code == SmbErrorCode::NotConnected || code == SmbErrorCode::TimedOut) {
+                throw SmbException(code, message);
+            }
             item.childCount = -1;
             continue;
         }
@@ -73,9 +80,8 @@ inline std::vector<SmbFileInfo> scanDirectoryOnCtx(smb2_context* ctx, const std:
             if (cancel.cancelled()) return {};
             try {
                 item.securityDescriptor = querySecurityDescriptorOnCtx(ctx, path_util::normalized(item.path), *manager);
-            } catch (const SmbSecurityQueryTransportError&) {
-                break;
-            } catch (...) {
+            } catch (const SmbException& error) {
+                if (error.code() != SmbErrorCode::AccessDenied) throw;
                 item.securityDescriptor.reset();
             }
         }
@@ -93,12 +99,8 @@ inline std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, const std::string& 
         for (auto& item : files) {
             if (cancel.cancelled()) return {};
             if (item.isDirectory) {
-                try {
-                    int newMaxDepth = (maxDepth > 0) ? maxDepth - 1 : maxDepth;
-                    item.children = listOnCtx(ctx, item.path, true, newMaxDepth, cancel);
-                } catch (const std::exception&) {
-                    item.children.clear();
-                }
+                int newMaxDepth = (maxDepth > 0) ? maxDepth - 1 : maxDepth;
+                item.children = listOnCtx(ctx, item.path, true, newMaxDepth, cancel);
             }
         }
     }

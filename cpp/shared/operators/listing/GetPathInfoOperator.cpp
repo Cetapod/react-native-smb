@@ -35,7 +35,8 @@ void GetPathInfoOperator::run() {
         info.securityDescriptor = handle.submitSync([&](smb2_context* ctx) {
             return querySecurityDescriptorOnCtx(ctx, path_util::normalized(path_), handle.manager());
         });
-    } catch (...) {
+    } catch (const SmbException& error) {
+        if (error.code() != SmbErrorCode::AccessDenied) throw;
         info.securityDescriptor.reset();
     }
 

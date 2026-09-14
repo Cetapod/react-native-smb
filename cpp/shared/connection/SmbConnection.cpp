@@ -125,7 +125,7 @@ void SmbConnectionManager::connect(const std::string& url, const SmbCredentials&
         if (connectResult < 0) {
             std::string libError = smb2_get_error(context_.get());
             std::string msg = "SMB Connection Failed: Could not connect to share '" + shareName + "'. Error: " + libError;
-            throwError(taskId, msg, SmbErrorMapper::fromErrnoResult(connectResult));
+            throwError(taskId, msg, SmbErrorMapper::fromSmbFailure(connectResult, smb2_get_nterror(context_.get()), libError));
         }
 
         isConnected_ = true;
@@ -160,7 +160,7 @@ void SmbConnectionManager::connectShare(const std::string& share, const std::str
         const int connectResult = smb2_connect_share(context_.get(), serverName_.c_str(), share.c_str(), credentials_->username.c_str());
         if (connectResult < 0) {
             std::string msg = "Failed to connect to SMB share '" + share + "': " + std::string(smb2_get_error(context_.get()));
-            throwError(taskId, msg, SmbErrorMapper::fromErrnoResult(connectResult));
+            throwError(taskId, msg, SmbErrorMapper::fromSmbFailure(connectResult, smb2_get_nterror(context_.get()), smb2_get_error(context_.get())));
         }
 
         isConnected_ = true;
@@ -223,7 +223,8 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
 
     const int ipcConnectResult = smb2_connect_share(ipcContext.get(), serverName_.c_str(), "IPC$", nullptr);
     if (ipcConnectResult < 0) {
-        throwError(taskId, "Failed to connect to IPC$ share: " + std::string(smb2_get_error(ipcContext.get())), SmbErrorMapper::fromErrnoResult(ipcConnectResult));
+        throwError(taskId, "Failed to connect to IPC$ share: " + std::string(smb2_get_error(ipcContext.get())),
+                   SmbErrorMapper::fromSmbFailure(ipcConnectResult, smb2_get_nterror(ipcContext.get()), smb2_get_error(ipcContext.get())));
     }
 
     auto shareEnumCallback = [](struct smb2_context* smb2, int status, void* command_data, void* private_data) {
@@ -232,7 +233,7 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
 
         if (status != 0) {
             ctx->error = "Failed to enumerate shares: " + std::string(smb2_get_error(smb2));
-            ctx->errorCode = SmbErrorMapper::fromErrnoResult(status);
+            ctx->errorCode = SmbErrorMapper::fromSmbFailure(status, smb2_get_nterror(smb2), smb2_get_error(smb2));
             return;
         }
 
@@ -262,7 +263,8 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
 
     const int enumStartResult = smb2_share_enum_async(ipcContext.get(), SHARE_INFO_1, shareEnumCallback, enumContext.get());
     if (enumStartResult != 0) {
-        throwError(taskId, "Failed to start share enumeration: " + std::string(smb2_get_error(ipcContext.get())), SmbErrorMapper::fromErrnoResult(enumStartResult));
+        throwError(taskId, "Failed to start share enumeration: " + std::string(smb2_get_error(ipcContext.get())),
+                   SmbErrorMapper::fromSmbFailure(enumStartResult, smb2_get_nterror(ipcContext.get()), smb2_get_error(ipcContext.get())));
     }
 
     struct pollfd pfd;
@@ -270,6 +272,7 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
     while (!enumContext->finished) {
         pfd.fd = smb2_get_fd(ipcContext.get());
         pfd.events = smb2_which_events(ipcContext.get());
+        pfd.revents = 0;
 
         if (poll(&pfd, 1, kShareEnumPollTimeoutMs) < 0) {
             throwError(taskId, "Poll failed during share enumeration", SmbErrorMapper::fromErrno(errno));
@@ -283,9 +286,14 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
         }
         idlePolls = 0;
 
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            throwError(taskId, "Share enumeration socket closed", static_cast<int>(SmbErrorCode::NotConnected));
+        }
+
         const int serviceResult = smb2_service(ipcContext.get(), pfd.revents);
         if (serviceResult < 0) {
-            throwError(taskId, "SMB2 service failed: " + std::string(smb2_get_error(ipcContext.get())), SmbErrorMapper::fromErrnoResult(serviceResult));
+            throwError(taskId, "SMB2 service failed: " + std::string(smb2_get_error(ipcContext.get())),
+                       SmbErrorMapper::fromSmbFailure(serviceResult, smb2_get_nterror(ipcContext.get()), smb2_get_error(ipcContext.get()), SmbErrorCode::NotConnected));
         }
     }
 
@@ -365,7 +373,7 @@ void SmbConnectionManager::checkAndConnect(const std::string& taskId) {
         const int connectResult = smb2_connect_share(context_.get(), serverName_.c_str(), currentShareName_.c_str(), credentials_->username.c_str());
         if (connectResult < 0) {
             std::string msg = "SMB Reconnect Failed: Could not connect to share '" + currentShareName_ + "'. Error: " + std::string(smb2_get_error(context_.get()));
-            throwError(taskId, msg, SmbErrorMapper::fromErrnoResult(connectResult));
+            throwError(taskId, msg, SmbErrorMapper::fromSmbFailure(connectResult, smb2_get_nterror(context_.get()), smb2_get_error(context_.get())));
         }
         isConnected_ = true;
         currentUrl_ = "smb://" + serverName_ + "/" + currentShareName_;
