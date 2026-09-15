@@ -48,7 +48,9 @@ task.subscribe((snap) => console.log(snap.progress));
 await task.result();
 ```
 
-URL: `smb://[<domain;][<user>@]<host>[:<port>]/<share>/<path>`
+Connection URLs are `smb://<host>[:<port>]` for `initialize`, and
+`smb://<host>[:<port>]/<share>` for `connect`. Pass username and password in
+`SmbCredentials`; pass directory and file paths to filesystem methods.
 
 ## Documentation
 

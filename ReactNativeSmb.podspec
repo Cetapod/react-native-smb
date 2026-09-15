@@ -1,6 +1,9 @@
+require "json"
+
 Pod::Spec.new do |s|
+  package = JSON.parse(File.read(File.join(__dir__, "package.json")))
   s.name         = "ReactNativeSmb"
-  s.version      = "1.0.0"
+  s.version      = package.fetch("version")
   s.summary      = "A React Native Nitro module for SMB client functionality using libsmb2"
   s.description  = <<-DESC
     A SMB client library for React Native applications using the libsmb2 C library, built using Nitro modules.
@@ -10,7 +13,7 @@ Pod::Spec.new do |s|
   s.author       = { "Cetapod" => "open-source@cetapod.com" }
   s.platform     = :ios, "12.0"
 
-  s.source       = { :git => "https://github.com/cetapod/react-native-smb.git", :tag => "#{s.version}" }
+  s.source       = { :git => "https://github.com/cetapod/react-native-smb.git", :tag => "v#{s.version}" }
 
   s.source_files = [
     "cpp/shared/**/*.{cpp,hpp}",

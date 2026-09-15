@@ -2,6 +2,10 @@ import { shapeTaskSnapshot } from '../bridge/decode';
 import { TaskStatus, type NativeSmbTask, type SmbTaskState } from '../types';
 import { taskResult } from './taskResult';
 
+function isTerminal(status: TaskStatus): boolean {
+  return status === TaskStatus.Success || status === TaskStatus.Error || status === TaskStatus.Cancelled;
+}
+
 /**
  * Handle for one native async operation.
  *
@@ -40,25 +44,56 @@ export class SmbTask<T = void> {
     return shapeTaskSnapshot(this.native.get());
   }
 
+  /** Latest known snapshot, reading native state once when needed. */
+  getSnapshot(): SmbTaskState | null {
+    if (!this.snapshot_) this.snapshot_ = this.get();
+    return this.snapshot_;
+  }
+
   /**
    * Subscribe to live updates. Optional — call only when you need progress UI.
    * Returns unsubscribe. Updates {@link progress} and {@link status} getters.
    */
   subscribe(listener?: (snapshot: SmbTaskState) => void): () => void {
-    const subId = this.native.subscribe((raw) => {
-      const snap = shapeTaskSnapshot(raw);
-      if (!snap) return;
+    let active = true;
+    let subId: string | null = null;
+
+    const receiveSnapshot = (snap: SmbTaskState, replay = false) => {
+      if (!active) return;
+      const existing = this.snapshot_;
+      if (existing && isTerminal(existing.status)) {
+        if (replay) listener?.(existing);
+        return;
+      }
+      if (existing && snap.updatedAt < existing.updatedAt) return;
       this.snapshot_ = snap;
       listener?.(snap);
-    });
+    };
 
-    const initial = this.get();
-    if (initial) {
-      this.snapshot_ = initial;
-      listener?.(initial);
+    const receive = (raw: Record<string, string>) => {
+      const snap = shapeTaskSnapshot(raw);
+      if (snap) receiveSnapshot(snap);
+    };
+
+    try {
+      subId = this.native.subscribe(receive);
+      const initial = this.get();
+      if (initial) receiveSnapshot(initial, true);
+    } catch (error) {
+      active = false;
+      try {
+        if (subId) this.native.unsubscribe(subId);
+      } catch {}
+      throw error;
     }
 
-    return () => this.native.unsubscribe(subId);
+    return () => {
+      if (!active) return;
+      active = false;
+      try {
+        if (subId) this.native.unsubscribe(subId);
+      } catch {}
+    };
   }
 
   /**

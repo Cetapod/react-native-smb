@@ -106,6 +106,7 @@ class HybridSMB : public ReactNativeSmb {
     void unsubscribeTaskEvents(const std::string& subscriptionId) override;
     std::unordered_map<std::string, std::string> getTask(const std::string& taskId) override;
     std::vector<std::unordered_map<std::string, std::string>> getActiveTasks() override;
+    std::vector<std::unordered_map<std::string, std::string>> getTransferTasks() override;
     std::vector<std::unordered_map<std::string, std::string>> getTaskHistory(int limit, int offset) override;
     void cancelTask(const std::string& taskId) override;
     void cancelTransferTasks() override;

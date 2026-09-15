@@ -107,6 +107,7 @@ class ReactNativeSmb : public virtual HybridObject {
     virtual void unsubscribeTaskEvents(const std::string& subscriptionId) = 0;
     virtual std::unordered_map<std::string, std::string> getTask(const std::string& taskId) = 0;
     virtual std::vector<std::unordered_map<std::string, std::string>> getActiveTasks() = 0;
+    virtual std::vector<std::unordered_map<std::string, std::string>> getTransferTasks() = 0;
     virtual std::vector<std::unordered_map<std::string, std::string>> getTaskHistory(int limit, int offset) = 0;
     virtual void cancelTask(const std::string& taskId) = 0;
     // Cancels unsettled download/upload/copy/duplicate tasks only.

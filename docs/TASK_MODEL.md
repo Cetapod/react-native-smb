@@ -115,7 +115,7 @@ function TransferTray({ smb }) {
   const tasks = useTransfers(smb);
   const { clearCompleted, hide } = useTransferActions(smb);
 
-  // tasks is SmbTaskState[] — all active transfers in the client store
+  // tasks includes active transfers and observed terminal transfers until cleared or hidden
 }
 ```
 
@@ -144,7 +144,7 @@ The task preserves the first causal operation error. Cancellation is returned on
 
 ## Lifecycle
 
-To stop transfer tray subscriptions without tearing down the SMB session:
+To stop transfer tray subscriptions without tearing down the SMB session. This clears local tray state; a later subscription rehydrates transfers retained by the native client:
 
 ```typescript
 smb.transferStore().stop();

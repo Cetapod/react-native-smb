@@ -44,6 +44,8 @@ void TaskObserverHub::untrack(const std::string& taskId) {
 void TaskObserverHub::onTaskUpdate(const SmbTaskState& snapshot) {
     {
         std::unique_lock lock(mutex_);
+        auto existing = tasks_.find(snapshot.taskId);
+        if (existing != tasks_.end() && existing->second.endedAt != 0) return;
         tasks_[snapshot.taskId] = snapshot;
         if (snapshot.endedAt != 0) {
             history_.push_back(snapshot);

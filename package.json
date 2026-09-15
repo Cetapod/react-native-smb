@@ -11,8 +11,9 @@
     "build:ios": "npm run build:libsmb2 && npm run build:xcframework",
     "build:full": "npm run build && npm run build:ios",
     "prepare": "npm run build",
-    "prepack": "npm run build:full",
+    "prepack": "npm run clean && npm run build:full",
     "postpack": "npm run clean:build",
+    "test": "vitest run",
     "clean": "rm -rf lib",
     "clean:build": "rm -rf ios/ && cd libsmb2 && rm -rf build/",
     "setup:example": "npm run build:full && cd example && npm install",
@@ -50,7 +51,8 @@
     "@types/react": "^19.1.1",
     "react-native": "0.83.4",
     "react-native-nitro-modules": "~0.31.9",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.11"
   },
   "files": [
     "lib/",

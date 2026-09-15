@@ -357,6 +357,13 @@ std::vector<std::unordered_map<std::string, std::string>> HybridSMB::getActiveTa
     return out;
 }
 
+std::vector<std::unordered_map<std::string, std::string>> HybridSMB::getTransferTasks() {
+    std::vector<std::unordered_map<std::string, std::string>> out;
+    if (!observer_) return out;
+    for (const auto& snapshot : observer_->getTransfers()) out.push_back(TaskSnapshotCodec::encode(snapshot));
+    return out;
+}
+
 std::vector<std::unordered_map<std::string, std::string>> HybridSMB::getTaskHistory(int limit, int offset) {
     std::vector<std::unordered_map<std::string, std::string>> out;
     if (!observer_) return out;
@@ -410,6 +417,7 @@ void HybridSMB::loadHybridMethods() {
         prototype.registerHybridMethod("unsubscribeTaskEvents", &HybridSMB::unsubscribeTaskEvents);
         prototype.registerHybridMethod("getTask", &HybridSMB::getTask);
         prototype.registerHybridMethod("getActiveTasks", &HybridSMB::getActiveTasks);
+        prototype.registerHybridMethod("getTransferTasks", &HybridSMB::getTransferTasks);
         prototype.registerHybridMethod("getTaskHistory", &HybridSMB::getTaskHistory);
         prototype.registerHybridMethod("cancelTask", &HybridSMB::cancelTask);
         prototype.registerHybridMethod("cancelTransferTasks", &HybridSMB::cancelTransferTasks);

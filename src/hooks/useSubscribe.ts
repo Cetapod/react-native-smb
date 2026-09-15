@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 import type { SmbTask } from '../core/SmbTask';
 import { TaskStatus, type SmbTaskState } from '../types';
@@ -22,34 +22,29 @@ export interface SubscribeHandle<T = void> {
  * const { progress, status, cancel } = useSubscribe(task);
  */
 export function useSubscribe<T>(task: SmbTask<T> | null | undefined): SubscribeHandle<T> {
-  const [snapshot, setSnapshot] = useState<SmbTaskState | null>(() => task?.get() ?? null);
+  const currentTask = task ?? null;
 
   const subscribe = useCallback(
     (listener?: (snap: SmbTaskState) => void) => {
-      if (!task) return () => {};
-      return task.subscribe((snap) => {
-        setSnapshot(snap);
-        listener?.(snap);
-      });
+      if (!currentTask) return () => {};
+      return currentTask.subscribe(listener);
     },
-    [task],
+    [currentTask],
   );
 
-  useEffect(() => {
-    setSnapshot(task?.get() ?? null);
-    return subscribe();
-  }, [task, subscribe]);
+  const getSnapshot = useCallback(() => currentTask?.getSnapshot() ?? null, [currentTask]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, () => null);
 
   const cancel = useCallback(() => {
-    task?.cancel();
-  }, [task]);
+    currentTask?.cancel();
+  }, [currentTask]);
 
   return {
     subscribe,
     cancel,
-    progress: snapshot?.progress ?? task?.progress ?? 0,
-    status: snapshot?.status ?? task?.status ?? TaskStatus.Pending,
+    progress: snapshot?.progress ?? 0,
+    status: snapshot?.status ?? TaskStatus.Pending,
     snapshot,
-    task: task ?? null,
+    task: currentTask,
   };
 }

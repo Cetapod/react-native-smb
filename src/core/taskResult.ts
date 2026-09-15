@@ -20,17 +20,25 @@ export function taskResult<T>(task: SmbTask<T>): Promise<T> {
     let settled = false;
     let unsubscribe = () => {};
 
+    const cleanup = () => {
+      try {
+        unsubscribe();
+      } catch {}
+    };
+
     const finish = (status: TaskStatus, raw: Record<string, string>) => {
       if (settled) return;
       settled = true;
-      if (status === TaskStatus.Success) {
-        try {
+      try {
+        if (status === TaskStatus.Success) {
           resolve(task.getResultValue());
-        } catch (e) {
-          reject(e);
+        } else {
+          reject(errorForStatus(status, raw, task.id));
         }
-      } else {
-        reject(errorForStatus(status, raw, task.id));
+      } catch (e) {
+        reject(e);
+      } finally {
+        cleanup();
       }
     };
 
@@ -52,13 +60,12 @@ export function taskResult<T>(task: SmbTask<T>): Promise<T> {
             errorCode: String(snap.errorCode),
             errorMessage: snap.errorMessage,
           });
-          unsubscribe();
         }
       });
 
-      if (settled) unsubscribe();
+      if (settled) cleanup();
     } catch (e) {
-      unsubscribe();
+      cleanup();
       reject(e);
     }
   });

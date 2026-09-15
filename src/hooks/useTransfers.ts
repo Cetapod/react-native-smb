@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import type { Smb } from '../core/SMB';
 import type { SmbClient } from '../core/SmbClient';
 import type { SmbTaskState } from '../types';
@@ -10,23 +10,14 @@ function store(smb: Smb) {
 }
 
 export function useTransfers(smb: Smb | null): SmbTaskState[] {
-  const [tasks, setTasks] = useState<SmbTaskState[]>(EMPTY_TASKS);
+  const transferStore = smb ? store(smb) : null;
+  const subscribe = useCallback(
+    (listener: () => void) => transferStore?.subscribe(listener) ?? (() => {}),
+    [transferStore],
+  );
+  const getSnapshot = useCallback(() => transferStore?.getSnapshot() ?? EMPTY_TASKS, [transferStore]);
 
-  useEffect(() => {
-    if (!smb) {
-      setTasks(EMPTY_TASKS);
-      return undefined;
-    }
-    const transferStore = store(smb);
-    const onStoreChange = () => {
-      setTasks(transferStore.getSnapshot());
-    };
-    const unsubscribe = transferStore.subscribe(onStoreChange);
-    onStoreChange();
-    return unsubscribe;
-  }, [smb]);
-
-  return smb ? tasks : EMPTY_TASKS;
+  return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY_TASKS);
 }
 
 export function useTransferActions(smb: Smb | null) {

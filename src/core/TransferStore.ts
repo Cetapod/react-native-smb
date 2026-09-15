@@ -6,6 +6,11 @@ import { TaskStatus, type SmbTaskState } from '../types';
 type Listener = () => void;
 
 const EMPTY_SNAPSHOT: SmbTaskState[] = [];
+const PUBLISH_INTERVAL_MS = 16;
+
+function isTerminal(status: TaskStatus): boolean {
+  return status === TaskStatus.Success || status === TaskStatus.Error || status === TaskStatus.Cancelled;
+}
 
 export class TransferStore {
   private tasks = new Map<string, SmbTaskState>();
@@ -13,39 +18,58 @@ export class TransferStore {
   private listeners = new Set<Listener>();
   private subId: string | null = null;
   private started = false;
+  private generation = 0;
   private snapshot: SmbTaskState[] = EMPTY_SNAPSHOT;
+  private publishTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly native: ReactNativeSmb) {}
 
   start(): void {
     if (this.started) return;
-    this.started = true;
+    let subId: string | null = null;
+    const generation = ++this.generation;
 
-    for (const raw of this.native.getActiveTasks()) {
-      const snap = shapeTaskSnapshot(raw);
-      if (snap && isTransferKind(snap.kind)) {
-        this.tasks.set(snap.taskId, snap);
-      }
-    }
-    this.rebuildSnapshot();
+    try {
+      subId = this.native.subscribeTaskEvents((raw) => {
+        if (this.generation !== generation) return;
+        try {
+          this.upsert(raw);
+        } catch {}
+      });
 
-    this.subId = this.native.subscribeTaskEvents((raw) => {
-      try {
+      for (const raw of this.native.getTransferTasks()) {
         const snap = shapeTaskSnapshot(raw);
-        if (!snap || !isTransferKind(snap.kind)) return;
-        if (this.hidden.has(snap.taskId)) return;
-        this.tasks.set(snap.taskId, snap);
-        this.notify();
+        if (!snap || !isTransferKind(snap.kind) || this.hidden.has(snap.taskId)) continue;
+        // Events received after subscription are newer than this hydration snapshot.
+        if (!this.tasks.has(snap.taskId)) this.tasks.set(snap.taskId, snap);
+      }
+
+      this.subId = subId;
+      this.started = true;
+      this.publishNow();
+    } catch (error) {
+      if (this.generation === generation) this.generation++;
+      try {
+        if (subId) this.native.unsubscribeTaskEvents(subId);
       } catch {}
-    });
+      this.tasks.clear();
+      this.publishNow();
+      throw error;
+    }
   }
 
   stop(): void {
+    this.generation++;
     if (this.subId) {
-      this.native.unsubscribeTaskEvents(this.subId);
+      try {
+        this.native.unsubscribeTaskEvents(this.subId);
+      } catch {}
       this.subId = null;
     }
     this.started = false;
+    this.tasks.clear();
+    this.hidden.clear();
+    this.publishNow();
   }
 
   subscribe(listener: Listener): () => void {
@@ -55,8 +79,18 @@ export class TransferStore {
   }
 
   getSnapshot(): SmbTaskState[] {
-    this.start();
     return this.snapshot;
+  }
+
+  private upsert(raw: Record<string, string>): void {
+    const snap = shapeTaskSnapshot(raw);
+    if (!snap || !isTransferKind(snap.kind) || this.hidden.has(snap.taskId)) return;
+
+    const existing = this.tasks.get(snap.taskId);
+    if (existing && (isTerminal(existing.status) || snap.updatedAt < existing.updatedAt)) return;
+
+    this.tasks.set(snap.taskId, snap);
+    this.schedulePublish();
   }
 
   private rebuildSnapshot(): void {
@@ -79,16 +113,34 @@ export class TransferStore {
         this.tasks.delete(id);
       }
     }
-    this.notify();
+    this.publishNow();
   }
 
   hide(taskId: string): void {
     this.hidden.add(taskId);
     this.tasks.delete(taskId);
-    this.notify();
+    this.publishNow();
   }
 
-  private notify(): void {
+  private schedulePublish(): void {
+    if (this.publishTimer !== null) return;
+    const generation = this.generation;
+    this.publishTimer = setTimeout(() => {
+      this.publishTimer = null;
+      if (this.generation !== generation) return;
+      this.publish();
+    }, PUBLISH_INTERVAL_MS);
+  }
+
+  private publishNow(): void {
+    if (this.publishTimer !== null) {
+      clearTimeout(this.publishTimer);
+      this.publishTimer = null;
+    }
+    this.publish();
+  }
+
+  private publish(): void {
     this.rebuildSnapshot();
     this.listeners.forEach((l) => {
       try {

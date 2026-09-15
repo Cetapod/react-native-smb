@@ -6,15 +6,17 @@ All async methods return `SmbTask<T>`. Await with `.result()`. See [Task model](
 
 | Method | Returns | `result()` type | Notes |
 | ------ | ------- | --------------- | ----- |
-| `initialize(url, creds)` | `SmbTask<void>` | `void` | Server only, no share |
+| `initialize(url, creds)` | `SmbTask<void>` | `void` | Configure server and credentials; no share |
 | `connect(url, creds)` | `SmbTask<SmbConnectionInfo>` | `SmbConnectionInfo` | Auth + mount share from URL |
 | `connectShare(share)` | `SmbTask<SmbConnectionInfo>` | `SmbConnectionInfo` | Switch share |
-| `disconnect()` | `SmbTask<void>` | `void` | Close session |
+| `disconnect()` | `SmbTask<void>` | `void` | Cancel work and close the session; client remains reusable |
 | `listShares()` | `SmbTask<SmbShareList[]>` | `SmbShareList[]` | Enumerate shares |
 | `isConnected()` | `boolean` | — | Sync |
 | `isInitialized()` | `boolean` | — | Sync |
 
-URL: `smb://[<domain;][<username>@]<host>[:<port>]/<share>/<path>`
+Connection URLs are `smb://<host>[:<port>]` for `initialize`, and
+`smb://<host>[:<port>]/<share>` for `connect`. Pass username and password in
+`SmbCredentials`; pass directory and file paths to filesystem methods.
 
 ```typescript
 interface SmbCredentials { username: string; password: string; }
@@ -116,7 +118,7 @@ Recursive listing, copy, duplicate, and delete fail on the first descendant fail
 | Hook | Purpose |
 | ---- | ------- |
 | `useSubscribe(task)` | React state for progress/status |
-| `useTransfers(smb)` | Active transfer tasks |
+| `useTransfers(smb)` | Active transfers plus observed terminal transfers until cleared or hidden |
 | `useTransferActions(smb)` | `clearCompleted()`, `hide(taskId)` |
 
 ## Utilities

@@ -27,22 +27,22 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
   // ----------------------------------------------
 
   /**
-   * Initializes connection to an SMB server (without connecting to a specific share)
-   * @param url Server URL (e.g., "smb://server-ip")
+   * Configures an SMB server (without connecting to a specific share)
+   * @param url Server URL (`smb://host[:port]`)
    * @param credentials Authentication credentials
    * @returns SmbTask that resolves when initialized
    */
   initialize(taskId: string, url: string, credentials: SmbCredentials): NativeSmbTask;
 
   /**
-   * Establishes a connection to an SMB server
-   * @param url The SMB server URL (e.g., "smb://server-ip/share")
+   * Establishes a connection to an SMB share
+   * @param url The SMB server URL (`smb://host[:port]/share`)
    * @param credentials Authentication credentials
    * @returns SmbTask with connection information
    * @throws {Error} When connection fails
    *
    * @example
-   * await smb.connect('smb://192.168.1.100', {
+   * await smb.connect('smb://192.168.1.100/Media', {
    *   username: 'admin',
    *   password: 'secret'
    * });
@@ -58,7 +58,7 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
   connectShare(taskId: string, share: string): NativeSmbTask;
 
   /**
-   * Disconnects from the current SMB server
+   * Cancels active work and disconnects from the current SMB server. The client can be reused.
    * @returns SmbTask that resolves when disconnected
    */
   disconnect(taskId: string): NativeSmbTask;
@@ -217,6 +217,9 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
    * @returns Array of task snapshots
    */
   getActiveTasks(): Array<Record<string, string>>;
+
+  /** Get the latest snapshot for every transfer task observed by this client. */
+  getTransferTasks(): Array<Record<string, string>>;
 
   /**
    * Get task history (settled tasks)

@@ -15,7 +15,10 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cetapod.smb"
+      "bundleIdentifier": "com.cetapod.smb",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Connect to SMB file servers on your local network."
+      }
     },
     "android": {
       "adaptiveIcon": {
