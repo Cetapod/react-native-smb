@@ -26,15 +26,15 @@ export function operationLabel(kind: SmbOperatorKind): string {
     case SmbOperatorKind.Connect:
       return 'Connect';
     case SmbOperatorKind.ConnectShare:
-      return 'Connect share';
+      return 'Connect Share';
     case SmbOperatorKind.Disconnect:
       return 'Disconnect';
     case SmbOperatorKind.ListShares:
-      return 'List shares';
+      return 'List Shares';
     case SmbOperatorKind.ListDirectory:
-      return 'List directory';
+      return 'List Directory';
     case SmbOperatorKind.GetPathInfo:
-      return 'Get info';
+      return 'Get Info';
     case SmbOperatorKind.GetSecurityDescriptor:
       return 'Get ACL';
     case SmbOperatorKind.DownloadFile:
@@ -42,7 +42,7 @@ export function operationLabel(kind: SmbOperatorKind): string {
     case SmbOperatorKind.UploadFile:
       return 'Upload';
     case SmbOperatorKind.CreateDirectory:
-      return 'Create folder';
+      return 'Create Folder';
     case SmbOperatorKind.DeleteItem:
       return 'Delete';
     case SmbOperatorKind.MoveItem:

@@ -18,6 +18,7 @@ void DuplicateItemOperator::run() {
     const std::string sourcePath = path_util::normalized(path_);
     const std::string parentPath = path_util::parentOf(sourcePath);
     const std::string fileName = path_util::extractFileName(sourcePath);
+    setSourceDestination(sourcePath, sourcePath);
 
     MetadataContextLease lease = makeMetadataLease();
     if (isCancelled()) {

@@ -22,7 +22,7 @@ struct SmbCredentials {
     std::string password;
 };
 
-struct SmbShareList {
+struct SmbShare {
     std::string name;
     std::string comment;
 };
@@ -262,21 +262,21 @@ struct JSIConverter<SmbFileInfo> {
 };
 
 template <>
-struct JSIConverter<SmbShareList> {
-    static jsi::Value toJSI(jsi::Runtime& runtime, const SmbShareList& share) {
+struct JSIConverter<SmbShare> {
+    static jsi::Value toJSI(jsi::Runtime& runtime, const SmbShare& share) {
         jsi::Object obj(runtime);
         obj.setProperty(runtime, "name", jsi::String::createFromUtf8(runtime, share.name));
         obj.setProperty(runtime, "comment", jsi::String::createFromUtf8(runtime, share.comment));
         return obj;
     }
 
-    static SmbShareList fromJSI(jsi::Runtime& runtime, const jsi::Value& value) {
+    static SmbShare fromJSI(jsi::Runtime& runtime, const jsi::Value& value) {
         if (!value.isObject()) {
-            throw std::invalid_argument("SmbShareList must be an object");
+            throw std::invalid_argument("SmbShare must be an object");
         }
 
         jsi::Object obj = value.asObject(runtime);
-        return SmbShareList{obj.getProperty(runtime, "name").asString(runtime).utf8(runtime), obj.getProperty(runtime, "comment").asString(runtime).utf8(runtime)};
+        return SmbShare{obj.getProperty(runtime, "name").asString(runtime).utf8(runtime), obj.getProperty(runtime, "comment").asString(runtime).utf8(runtime)};
     }
 
     static bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) { return value.isObject(); }

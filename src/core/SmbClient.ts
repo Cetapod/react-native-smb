@@ -8,7 +8,7 @@ import type {
   SmbCredentials,
   SmbFileInfo,
   SmbSecurityDescriptor,
-  SmbShareList,
+  SmbShare,
 } from '../types';
 import { generateTaskId } from './ids';
 import { SmbTask } from './SmbTask';
@@ -69,7 +69,7 @@ export class SmbClient {
     return this.op((id) => this.native.disconnect(id));
   }
 
-  listShares(): SmbTask<SmbShareList[]> {
+  listShares(): SmbTask<SmbShare[]> {
     return this.op((id) => this.native.listShares(id));
   }
 

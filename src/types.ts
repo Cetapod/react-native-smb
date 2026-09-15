@@ -3,7 +3,7 @@ export interface SmbCredentials {
   readonly password: string;
 }
 
-export interface SmbShareList {
+export interface SmbShare {
   readonly name: string;
   readonly comment: string;
 }

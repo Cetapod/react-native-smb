@@ -17,7 +17,7 @@ constexpr int kShareEnumPollTimeoutMs = 5000;
 constexpr int kShareEnumMaxIdlePolls = 12;
 
 struct ShareEnumContext {
-    std::vector<SmbShareList>* shares;
+    std::vector<SmbShare>* shares;
     std::string error;
     int errorCode;
     bool finished;
@@ -190,7 +190,7 @@ void SmbConnectionManager::disconnect(const std::string& taskId) {
     }
 }
 
-std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& taskId) {
+std::vector<SmbShare> SmbConnectionManager::listShares(const std::string& taskId) {
     std::lock_guard<std::recursive_timed_mutex> lock(connectionMutex_);
 
     if (!isInitialized_) {
@@ -201,7 +201,7 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
         throwError(taskId, "Share List Failed: No server name found. You must connect to a server before listing shares.", static_cast<int>(SmbErrorCode::NotConnected));
     }
 
-    std::vector<SmbShareList> shares;
+    std::vector<SmbShare> shares;
     auto enumContext = std::make_unique<ShareEnumContext>(ShareEnumContext{&shares, "", static_cast<int>(SmbErrorCode::Unknown), false});
 
     auto ipcContext = std::shared_ptr<smb2_context>(smb2_init_context(), [](smb2_context* ctx) {
@@ -246,7 +246,7 @@ std::vector<SmbShareList> SmbConnectionManager::listShares(const std::string& ta
         for (uint32_t i = 0; i < rep->ses.ShareInfo.Level1.EntriesRead; i++) {
             auto& shareInfo = rep->ses.ShareInfo.Level1.Buffer->share_info_1[i];
 
-            SmbShareList share;
+            SmbShare share;
             share.name = shareInfo.netname.utf8 ? shareInfo.netname.utf8 : "";
             share.comment = shareInfo.remark.utf8 ? shareInfo.remark.utf8 : "";
 

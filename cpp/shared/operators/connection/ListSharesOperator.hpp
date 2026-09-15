@@ -2,12 +2,12 @@
 
 #include <vector>
 
-#include "../../ReactNativeSmb.hpp"  // SmbShareList
+#include "../../ReactNativeSmb.hpp"  // SmbShare
 #include "../Operator.hpp"
 
 namespace react_native_smb {
 
-class ListSharesOperator : public Operator<std::vector<SmbShareList>> {
+class ListSharesOperator : public Operator<std::vector<SmbShare>> {
    public:
     ListSharesOperator() = default;
 

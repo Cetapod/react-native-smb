@@ -59,7 +59,7 @@ class SmbConnectionManager {
     void connectShare(const std::string& share, const std::string& taskId = "");
     void disconnect(const std::string& taskId = "");
 
-    std::vector<SmbShareList> listShares(const std::string& taskId = "");
+    std::vector<SmbShare> listShares(const std::string& taskId = "");
 
     void checkAndInitialize(const std::string& taskId = "");
     void checkAndConnect(const std::string& taskId = "");

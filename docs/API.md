@@ -10,7 +10,7 @@ All async methods return `SmbTask<T>`. Await with `.result()`. See [Task model](
 | `connect(url, creds)` | `SmbTask<SmbConnectionInfo>` | `SmbConnectionInfo` | Auth + mount share from URL |
 | `connectShare(share)` | `SmbTask<SmbConnectionInfo>` | `SmbConnectionInfo` | Switch share |
 | `disconnect()` | `SmbTask<void>` | `void` | Cancel work and close the session; client remains reusable |
-| `listShares()` | `SmbTask<SmbShareList[]>` | `SmbShareList[]` | Enumerate shares |
+| `listShares()` | `SmbTask<SmbShare[]>` | `SmbShare[]` | Enumerate shares |
 | `isConnected()` | `boolean` | — | Sync |
 | `isInitialized()` | `boolean` | — | Sync |
 
@@ -25,7 +25,7 @@ interface SmbConnectionInfo {
   url: string; server: string; share: string; isConnected: boolean;
 }
 
-interface SmbShareList { name: string; comment: string; }
+interface SmbShare { name: string; comment: string; }
 ```
 
 ## File system

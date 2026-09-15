@@ -6,6 +6,7 @@ import { File } from 'expo-file-system';
 import {
   SmbOperatorKind,
   TaskStatus,
+  formatFileSize,
   operationLabel,
   useTransferActions,
   useTransfers,
@@ -37,18 +38,6 @@ const shareAll = async (uris) => {
   }
 };
 
-const formatBytes = (n) => {
-  if (!n || n <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let i = 0;
-  let v = n;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
-};
-
 const formatDuration = (seconds) => {
   if (!isFinite(seconds) || seconds < 0) return '--';
   if (seconds < 60) return `${Math.ceil(seconds)}s`;
@@ -76,11 +65,9 @@ const computeRate = (t, now) => {
 
 const getTaskDisplayName = (task) => {
   const path = task.destinationPath || task.sourcePath;
-  if (path) {
-    const parts = path.split('/');
-    return parts[parts.length - 1];
-  }
-  return 'Unknown';
+  if (!path) return '';
+  const parts = path.split('/');
+  return parts[parts.length - 1];
 };
 
 const badgeKey = (status) => {
@@ -209,7 +196,7 @@ const TransferTrayPanel = () => {
 
               let metaText = badge.text || `${progress}%`;
               if (isRunning && rate) {
-                metaText = `${progress}% · ${formatBytes(rate.speed)}/s · ${formatDuration(rate.eta)} left`;
+                metaText = `${progress}% · ${formatFileSize(rate.speed)}/s · ${formatDuration(rate.eta)} left`;
               }
 
               return (

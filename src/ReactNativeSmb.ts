@@ -1,5 +1,5 @@
 import type { HybridObject } from 'react-native-nitro-modules';
-import type { SmbCredentials, SmbShareList, SmbConnectionInfo, SmbFileInfo, SmbSecurityDescriptor, NativeSmbTask } from './types';
+import type { SmbCredentials, NativeSmbTask } from './types';
 
 /**
  * A Nitro module that provides SMB client functionality using libsmb2

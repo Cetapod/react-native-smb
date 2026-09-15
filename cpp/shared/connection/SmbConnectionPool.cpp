@@ -395,7 +395,7 @@ void SmbConnectionPool::resetPool() {
     notifyObservers();
 }
 
-std::vector<SmbShareList> SmbConnectionPool::listShares(const std::string& taskId) {
+std::vector<SmbShare> SmbConnectionPool::listShares(const std::string& taskId) {
     auto handle = requestContext(AcquireMode::Interactive, SmbOperatorKind::ListShares, taskId);
     return handle.manager().listShares(taskId);
 }
