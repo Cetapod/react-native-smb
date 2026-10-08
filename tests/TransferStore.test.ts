@@ -243,4 +243,34 @@ describe('TransferStore', () => {
 
     expect(notifications).toBe(1);
   });
+
+  it('does not notify when an action leaves the snapshot unchanged', () => {
+    const native = new FakeNative();
+    native.transfers = [snapshot('transfer-1', TaskStatus.Running, 1)];
+    const store = new TransferStore(nativeBridge(native));
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+
+    store.clearCompleted();
+    store.hide('missing-transfer');
+
+    expect(notifications).toBe(0);
+  });
+
+  it('flushes a pending update when a no-op action publishes immediately', () => {
+    const native = new FakeNative();
+    native.transfers = [snapshot('transfer-1', TaskStatus.Running, 1)];
+    const store = new TransferStore(nativeBridge(native));
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+
+    native.emit(snapshot('transfer-1', TaskStatus.Running, 2));
+    store.clearCompleted();
+
+    expect(notifications).toBe(1);
+    expect(store.getSnapshot()).toMatchObject([{ taskId: 'transfer-1', updatedAt: 2 }]);
+
+    vi.advanceTimersByTime(16);
+    expect(notifications).toBe(1);
+  });
 });

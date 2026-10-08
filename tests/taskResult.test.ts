@@ -100,6 +100,24 @@ describe('SmbTask.result', () => {
     expect(native.unsubscribed).toEqual(['sub-1']);
   });
 
+  it('delivers terminal state to every active subscriber', async () => {
+    const native = new FakeNativeTask(snapshot(TaskStatus.Running));
+    const task = new SmbTask<string>('task-1', native);
+    const observed: TaskStatus[] = [];
+    const unsubscribe = task.subscribe((snap) => observed.push(snap.status));
+    const result = task.result();
+
+    native.emit(snapshot(TaskStatus.Success));
+    native.emit(snapshot(TaskStatus.Error));
+
+    await expect(result).resolves.toBe('result');
+    expect(observed).toEqual([TaskStatus.Running, TaskStatus.Success]);
+    expect(native.unsubscribed).toEqual(['sub-2']);
+
+    unsubscribe();
+    expect(native.unsubscribed).toEqual(['sub-2', 'sub-1']);
+  });
+
   it('rejects and cleans up when result conversion fails', async () => {
     const native = new FakeNativeTask(snapshot(TaskStatus.Running));
     native.resultError = new Error('result conversion failed');

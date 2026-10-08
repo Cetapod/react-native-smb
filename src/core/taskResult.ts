@@ -1,17 +1,11 @@
-import { terminalStatus } from '../bridge/decode';
-import { SmbError, SmbTaskError, TaskStatus } from '../types';
+import { isTerminalStatus } from '../labels';
+import { SmbError, SmbTaskError, TaskStatus, type SmbTaskState } from '../types';
 import type { SmbTask } from './SmbTask';
 
-function errorForStatus(
-  status: TaskStatus,
-  raw: Record<string, string>,
-  taskId: string,
-): SmbTaskError {
-  const parsed = parseInt(raw.errorCode ?? '0', 10);
-  const code = Object.values(SmbError).includes(parsed as SmbError) ? (parsed as SmbError) : SmbError.Unknown;
+function errorForSnapshot(snapshot: SmbTaskState, taskId: string): SmbTaskError {
   const message =
-    raw.errorMessage || (status === TaskStatus.Cancelled ? 'Task cancelled' : 'Task failed');
-  return new SmbTaskError(message, code, taskId);
+    snapshot.errorMessage || (snapshot.status === TaskStatus.Cancelled ? 'Task cancelled' : 'Task failed');
+  return new SmbTaskError(message, snapshot.errorCode as SmbError, taskId);
 }
 
 /** Subscribe once, resolve or reject when the task reaches a terminal status. */
@@ -26,14 +20,14 @@ export function taskResult<T>(task: SmbTask<T>): Promise<T> {
       } catch {}
     };
 
-    const finish = (status: TaskStatus, raw: Record<string, string>) => {
+    const finish = (snapshot: SmbTaskState) => {
       if (settled) return;
       settled = true;
       try {
-        if (status === TaskStatus.Success) {
+        if (snapshot.status === TaskStatus.Success) {
           resolve(task.getResultValue());
         } else {
-          reject(errorForStatus(status, raw, task.id));
+          reject(errorForSnapshot(snapshot, task.id));
         }
       } catch (e) {
         reject(e);
@@ -43,24 +37,14 @@ export function taskResult<T>(task: SmbTask<T>): Promise<T> {
     };
 
     try {
-      const raw = task.getRaw();
-      const status = terminalStatus(raw);
-      if (status !== null) {
-        finish(status, raw);
+      const initial = task.get();
+      if (initial && isTerminalStatus(initial.status)) {
+        finish(initial);
         return;
       }
 
       unsubscribe = task.subscribe((snap) => {
-        if (
-          snap.status === TaskStatus.Success ||
-          snap.status === TaskStatus.Error ||
-          snap.status === TaskStatus.Cancelled
-        ) {
-          finish(snap.status, {
-            errorCode: String(snap.errorCode),
-            errorMessage: snap.errorMessage,
-          });
-        }
+        if (isTerminalStatus(snap.status)) finish(snap);
       });
 
       if (settled) cleanup();

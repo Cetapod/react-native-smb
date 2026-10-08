@@ -1,16 +1,12 @@
 import { shapeTaskSnapshot } from '../bridge/decode';
-import { isTransferKind } from '../labels';
+import { isTerminalStatus, isTransferKind } from '../labels';
 import type { ReactNativeSmb } from '../ReactNativeSmb';
-import { TaskStatus, type SmbTaskState } from '../types';
+import { type SmbTaskState } from '../types';
 
 type Listener = () => void;
 
 const EMPTY_SNAPSHOT: SmbTaskState[] = [];
 const PUBLISH_INTERVAL_MS = 16;
-
-function isTerminal(status: TaskStatus): boolean {
-  return status === TaskStatus.Success || status === TaskStatus.Error || status === TaskStatus.Cancelled;
-}
 
 export class TransferStore {
   private tasks = new Map<string, SmbTaskState>();
@@ -87,31 +83,22 @@ export class TransferStore {
     if (!snap || !isTransferKind(snap.kind) || this.hidden.has(snap.taskId)) return;
 
     const existing = this.tasks.get(snap.taskId);
-    if (existing && (isTerminal(existing.status) || snap.updatedAt < existing.updatedAt)) return;
+    if (existing && (isTerminalStatus(existing.status) || snap.updatedAt < existing.updatedAt)) return;
 
     this.tasks.set(snap.taskId, snap);
     this.schedulePublish();
   }
 
-  private rebuildSnapshot(): void {
-    if (this.tasks.size === 0) {
-      this.snapshot = EMPTY_SNAPSHOT;
-      return;
-    }
-    this.snapshot = Array.from(this.tasks.values())
+  private buildSnapshot(): SmbTaskState[] {
+    if (this.tasks.size === 0) return EMPTY_SNAPSHOT;
+    return Array.from(this.tasks.values())
       .filter((t) => !this.hidden.has(t.taskId))
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   clearCompleted(): void {
     for (const [id, snap] of this.tasks) {
-      if (
-        snap.status === TaskStatus.Success ||
-        snap.status === TaskStatus.Error ||
-        snap.status === TaskStatus.Cancelled
-      ) {
-        this.tasks.delete(id);
-      }
+      if (isTerminalStatus(snap.status)) this.tasks.delete(id);
     }
     this.publishNow();
   }
@@ -141,7 +128,11 @@ export class TransferStore {
   }
 
   private publish(): void {
-    this.rebuildSnapshot();
+    const next = this.buildSnapshot();
+    if (next.length === this.snapshot.length && next.every((task, index) => task === this.snapshot[index])) {
+      return;
+    }
+    this.snapshot = next;
     this.listeners.forEach((l) => {
       try {
         l();

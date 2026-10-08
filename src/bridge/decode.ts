@@ -98,16 +98,3 @@ export function shapePoolInfo(raw: Array<Record<string, string>>): PoolInfo {
     slots: raw.map(shapePoolSlot),
   };
 }
-
-export function terminalStatus(raw: Record<string, string>): TaskStatus | null {
-  if (raw.exists === '0') return null;
-  const status = enumFromInt(parseIntField(raw, 'status'), TaskStatus);
-  if (
-    status === TaskStatus.Success ||
-    status === TaskStatus.Error ||
-    status === TaskStatus.Cancelled
-  ) {
-    return status;
-  }
-  return null;
-}

@@ -1,10 +1,7 @@
 import { shapeTaskSnapshot } from '../bridge/decode';
+import { isTerminalStatus } from '../labels';
 import { TaskStatus, type NativeSmbTask, type SmbTaskState } from '../types';
 import { taskResult } from './taskResult';
-
-function isTerminal(status: TaskStatus): boolean {
-  return status === TaskStatus.Success || status === TaskStatus.Error || status === TaskStatus.Cancelled;
-}
 
 /**
  * Handle for one native async operation.
@@ -50,6 +47,14 @@ export class SmbTask<T = void> {
     return this.snapshot_;
   }
 
+  private applySnapshot(next: SmbTaskState): SmbTaskState | null {
+    const current = this.snapshot_;
+    if (current && isTerminalStatus(current.status)) return current;
+    if (current && next.updatedAt < current.updatedAt) return null;
+    this.snapshot_ = next;
+    return next;
+  }
+
   /**
    * Subscribe to live updates. Optional — call only when you need progress UI.
    * Returns unsubscribe. Updates {@link progress} and {@link status} getters.
@@ -57,17 +62,17 @@ export class SmbTask<T = void> {
   subscribe(listener?: (snapshot: SmbTaskState) => void): () => void {
     let active = true;
     let subId: string | null = null;
+    let terminalDelivered = false;
 
-    const receiveSnapshot = (snap: SmbTaskState, replay = false) => {
+    const receiveSnapshot = (snap: SmbTaskState) => {
       if (!active) return;
-      const existing = this.snapshot_;
-      if (existing && isTerminal(existing.status)) {
-        if (replay) listener?.(existing);
-        return;
+      const effective = this.applySnapshot(snap);
+      if (!effective) return;
+      if (isTerminalStatus(effective.status)) {
+        if (terminalDelivered) return;
+        terminalDelivered = true;
       }
-      if (existing && snap.updatedAt < existing.updatedAt) return;
-      this.snapshot_ = snap;
-      listener?.(snap);
+      listener?.(effective);
     };
 
     const receive = (raw: Record<string, string>) => {
@@ -75,25 +80,24 @@ export class SmbTask<T = void> {
       if (snap) receiveSnapshot(snap);
     };
 
-    try {
-      subId = this.native.subscribe(receive);
-      const initial = this.get();
-      if (initial) receiveSnapshot(initial, true);
-    } catch (error) {
-      active = false;
-      try {
-        if (subId) this.native.unsubscribe(subId);
-      } catch {}
-      throw error;
-    }
-
-    return () => {
+    const unsubscribe = () => {
       if (!active) return;
       active = false;
       try {
         if (subId) this.native.unsubscribe(subId);
       } catch {}
     };
+
+    try {
+      subId = this.native.subscribe(receive);
+      const initial = this.get();
+      if (initial) receiveSnapshot(initial);
+    } catch (error) {
+      unsubscribe();
+      throw error;
+    }
+
+    return unsubscribe;
   }
 
   /**
@@ -110,11 +114,6 @@ export class SmbTask<T = void> {
   /** Like `Promise.allSettled` over {@link result}. */
   static settleAll<T>(tasks: SmbTask<T>[]): Promise<PromiseSettledResult<T>[]> {
     return Promise.allSettled(tasks.map((task) => task.result()));
-  }
-
-  /** @internal */
-  getRaw(): Record<string, string> {
-    return this.native.get();
   }
 
   /** @internal */
