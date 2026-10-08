@@ -116,11 +116,18 @@ const FileActionModal = ({ visible, file, onClose, onAction, showAlert }) => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.quickRow}>
               {!isDir && (
-                <QuickAction
-                  icon={'\u2B07'}
-                  label="Download"
-                  onPress={() => dispatch('download')}
-                />
+                <>
+                  <QuickAction
+                    icon={'\u2B07'}
+                    label="Download"
+                    onPress={() => dispatch('download')}
+                  />
+                  <QuickAction
+                    icon={'\uD83D\uDDBC'}
+                    label="Preview"
+                    onPress={() => dispatch('preview')}
+                  />
+                </>
               )}
               <QuickAction
                 icon={'\u29C9'}

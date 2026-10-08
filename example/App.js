@@ -12,6 +12,7 @@ import FileInfoModal from './components/FileInfoModal';
 import FileOperationModal from './components/FileOperationModal';
 import FolderPickerModal from './components/FolderPickerModal';
 import PoolDebugPanel from './components/PoolDebugPanel';
+import FilePreviewModal from './components/FilePreviewModal';
 import TaskSnapshotBar from './components/TaskSnapshotBar';
 import TransferTrayPanel from './components/TransferTrayPanel';
 import { ModalStackProvider, useModalStack } from './contexts/ModalStackContext';
@@ -33,6 +34,7 @@ const AppShell = () => {
 
   const [pendingBulkMove, setPendingBulkMove] = useState(null);
   const [trackedDownloadTask, setTrackedDownloadTask] = useState(null);
+  const [previewFile, setPreviewFile] = useState(null);
 
   const handleAction = async (actionId, file) => {
     switch (actionId) {
@@ -44,6 +46,9 @@ const AppShell = () => {
         break;
       case 'download':
         await fileOperations.downloadFile(file, { onTask: setTrackedDownloadTask });
+        break;
+      case 'preview':
+        setPreviewFile(file);
         break;
       case 'copy':
         modals.openFileOperation('copy');
@@ -226,6 +231,13 @@ const AppShell = () => {
       <DisconnectOverlay visible={smb.isDisconnecting} />
 
       {__DEV__ && <PoolDebugPanel />}
+      <FilePreviewModal
+        visible={!!previewFile}
+        file={previewFile}
+        currentPath={smb.currentPath}
+        SMB={smb.smb}
+        onClose={() => setPreviewFile(null)}
+      />
       <TaskSnapshotBar task={trackedDownloadTask} />
       <TransferTrayPanel />
     </View>
