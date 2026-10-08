@@ -1,6 +1,6 @@
 {
   "name": "@cetapod/react-native-smb",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "SMB client for React Native — simply access, manage, and transfer files across network shares.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
