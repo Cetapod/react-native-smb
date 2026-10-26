@@ -32,7 +32,7 @@ interface SmbShare { name: string; comment: string; }
 
 | Method | Returns | `result()` type | Notes |
 | ------ | ------- | --------------- | ----- |
-| `listDirectory(path, recursive?, maxDepth?, includeSecurityDescriptor?)` | `SmbTask<SmbFileInfo[]>` | `SmbFileInfo[]` | `maxDepth: -1` = unlimited; SD defaults to `false` |
+| `listDirectory(path, recursive?, maxDepth?, includeSecurityDescriptor?, batchSize?)` | `SmbListTask` | `SmbFileInfo[]` | `maxDepth: -1` = unlimited; SD defaults to `false`; `batchSize` defaults to `10` |
 | `getPathInfo(path)` | `SmbTask<SmbFileInfo>` | `SmbFileInfo` | Includes SD when available |
 | `downloadFile(remote, local)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
 | `uploadFile(local, remote)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
@@ -62,6 +62,29 @@ const files = await smb.listDirectory('/', false, -1, true).result();
 const firstDacl = files[0]?.securityDescriptor?.dacl;
 ```
 
+### Streaming a listing
+
+A non-recursive `listDirectory` delivers entries while the directory is still being read, so large folders render before the scan finishes:
+
+```typescript
+const task = smb.listDirectory('/Media');
+const unsubscribe = task.subscribeEntries((batch) => {
+  setFiles((prev) => prev.concat(batch));
+});
+try {
+  await task.wait(); // or `await task.result()` for the complete array
+} finally {
+  unsubscribe();
+}
+```
+
+- Every streamed entry is final: directories already carry `childCount`, and `securityDescriptor` is set when requested.
+- A batch is pushed once `batchSize` entries are ready or 100 ms after the previous batch; the first batch goes out as soon as anything is ready. A batch contains every entry ready at that moment, so it can be larger than `batchSize`.
+- Subscribing late loses nothing: the first callback replays every entry emitted so far.
+- Entries arrive in server order. Sort in the UI if you need a stable order.
+- If the task fails or is cancelled, entries already received are an incomplete listing.
+- Recursive listings (`recursive: true`, `maxDepth !== 0`) do not stream; use `result()`.
+
 ## Pool
 
 | Method | Returns | Notes |
@@ -83,10 +106,19 @@ See [Connection pool](./ARCHITECTURE.md).
 | `id` | Task identifier |
 | `progress`, `status` | Live getters after `subscribe()` |
 | `result()` | `Promise<T>` |
+| `wait()` | `Promise<void>`; settles like `result()` without reading the result value |
 | `subscribe(listener?)` | Returns unsubscribe |
 | `cancel()` | Abort |
 | `get()` | One-shot snapshot |
 | `SmbTask.settleAll(tasks)` | `Promise.allSettled` over results |
+
+### `SmbListTask`
+
+`SmbTask<SmbFileInfo[]>` returned by `listDirectory`, plus:
+
+| Member | Description |
+| ------ | ----------- |
+| `subscribeEntries(listener)` | Receive entry batches (replays earlier ones first); returns unsubscribe |
 
 ### Errors
 

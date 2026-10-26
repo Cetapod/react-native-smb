@@ -53,6 +53,18 @@ Slot 0 is application-level scheduling on top of what libsmb2 provides — inter
 
 Cross-task parallelism is the pool. Within a single transfer, `SmbFileIO` pipelines up to eight SMB2 READ/WRITE on the same `smb2_context` (`kMaxInFlight` in `SmbFileIO.cpp`). Same connection, same session — credit-based pipelining, separate from slot assignment.
 
+## Listing pipeline
+
+A non-recursive `listDirectory` runs `DirectoryStreamer` on one Interactive slot instead of libsmb2's `smb2_opendir` (which reads the whole directory before returning):
+
+```
+[CREATE + QUERY_DIRECTORY] → QUERY_DIRECTORY … → CLOSE       decode each reply as it arrives
+   └ per directory entry: [CREATE + QUERY_DIRECTORY] … CLOSE  childCount, up to 8 in flight
+   └ per entry (opt-in):  CREATE + QUERY_INFO + CLOSE         security descriptor
+```
+
+An entry is ready once its lookups finish; ready entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result. Recursive listings keep the parallel per-directory scan across Metadata slots.
+
 ## Diagnostics
 
 ```typescript

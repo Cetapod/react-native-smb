@@ -7,6 +7,7 @@ You can mix three actions on any task:
 | Action | When | API |
 | ------ | ---- | --- |
 | Get result | You need the return value | `await task.result()` |
+| Wait | Completion only | `await task.wait()` |
 | Watch progress | UI needs updates | `task.subscribe()` or `useSubscribe` |
 | Cancel | User aborts | `task.cancel()` |
 
@@ -90,6 +91,19 @@ function DownloadBar({ task }) {
 | `determinate` | `true` for download/upload/copy |
 | `sourcePath` / `destinationPath` | Paths for transfer ops |
 | `errorCode` / `errorMessage` | Set on failure |
+
+## Stream listing entries
+
+`listDirectory` returns an `SmbListTask`. Besides status snapshots, a non-recursive listing pushes entry batches through a separate channel — no `progress` is involved:
+
+```typescript
+const task = smb.listDirectory('/Media');
+const unsub = task.subscribeEntries((batch) => append(batch));
+await task.wait(); // completion without converting the full result again
+unsub();
+```
+
+`subscribeEntries` replays the entries emitted before the call, so it can be attached at any time. All batches are delivered before the task's terminal status. `result()` still resolves with the complete array, so existing callers are unaffected.
 
 ## Fire-and-forget
 
