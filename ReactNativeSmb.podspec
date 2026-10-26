@@ -26,9 +26,10 @@ Pod::Spec.new do |s|
   s.dependency "React-Core"
   s.dependency "NitroModules"
 
-  # Transfer and tree orchestration headers are implementation details.
+  # Transfer, listing, and tree orchestration headers are implementation details.
   s.public_header_files = Dir["cpp/**/*.hpp"].reject do |header|
-    header.start_with?("cpp/shared/io/transfer/") || header == "cpp/shared/io/SmbCopyTree.hpp"
+    header.start_with?("cpp/shared/io/transfer/") || header.start_with?("cpp/shared/io/listing/") ||
+      header == "cpp/shared/io/SmbCopyTree.hpp"
   end
 
   # Compiler settings

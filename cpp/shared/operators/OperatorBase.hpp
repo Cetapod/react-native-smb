@@ -22,6 +22,8 @@ namespace jsi = facebook::jsi;
 
 class SmbConnectionPool;
 class SmbTask;
+class EntryStream;
+struct SmbFileInfo;
 
 class OperatorBase {
    public:
@@ -49,6 +51,8 @@ class OperatorBase {
     void addExpectedBytes(int64_t bytes);
     void setSourceDestination(const std::string& source, const std::string& destination);
     void publishResult(std::any value, std::function<jsi::Value(jsi::Runtime&, const std::any&)> converter);
+    // Owning task's incremental listing stream (null when detached from a task).
+    std::shared_ptr<EntryStream> entryStream() const;
 
    private:
     OperatorContext ctx_{};

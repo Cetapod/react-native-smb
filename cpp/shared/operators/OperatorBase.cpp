@@ -54,4 +54,8 @@ void OperatorBase::publishResult(std::any value, std::function<jsi::Value(jsi::R
     if (ctx_.task) ctx_.task->publishResult(std::move(value), std::move(converter));
 }
 
+std::shared_ptr<EntryStream> OperatorBase::entryStream() const {
+    return ctx_.task ? ctx_.task->entryStream() : nullptr;
+}
+
 }  // namespace react_native_smb
