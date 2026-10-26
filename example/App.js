@@ -25,6 +25,57 @@ import SharesScreen from './screens/SharesScreen';
 
 const Stack = createNativeStackNavigator();
 
+/** Stable screen type — must not be defined inside AppShell or listing batches remount the stack and reset scroll. */
+function FilesViewScreen({ navigation }) {
+  const smb = useSmb();
+  const modals = useModalStack();
+  const fileOperations = useFileOperations(smb.smb, smb.currentPath, smb.loadFiles, smb.setIsLoading, smb.showAlert);
+  const fileInfo = useFileInfo(smb.smb, smb.currentPath, smb.showAlert);
+
+  return (
+    <FilesScreen
+      navigation={navigation}
+      files={smb.filesList}
+      currentPath={smb.currentPath}
+      selectedShare={smb.selectedShare}
+      username={smb.currentUsername}
+      onLoadFiles={smb.loadFiles}
+      onFileAction={modals.openFileAction}
+      onFolderInfo={fileInfo.showCurrentFolderInfo}
+      onCreateFolder={fileOperations.createFolder}
+      onUploadFile={fileOperations.uploadFile}
+      onRefresh={() => smb.loadFiles(smb.currentPath)}
+      onBack={smb.handleBackToShares}
+      onLogout={smb.handleBackToLogin}
+      isListing={smb.isListing}
+      showAlert={smb.showAlert}
+      showPrompt={smb.showPrompt}
+      onBulkDownload={(items) => fileOperations.downloadFiles(items, { autoShare: false })}
+      onBulkDuplicate={(items) => fileOperations.duplicateFiles(items)}
+      onBulkDelete={(items) => fileOperations.deleteFiles(items)}
+      onBulkMove={(items, onDone) => {
+        modals.openFolderPickerForBulkMove(items, onDone);
+      }}
+      sortBy={smb.prefs.sortBy}
+      sortOrder={smb.prefs.sortOrder}
+      showHidden={smb.prefs.showHidden}
+      onChangeSort={(sortBy, sortOrder) => smb.updatePrefs({ sortBy, sortOrder })}
+      onToggleHidden={(showHidden) => smb.updatePrefs({ showHidden })}
+    />
+  );
+}
+
+function FilesNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+      <Stack.Screen
+        name="FilesView"
+        component={FilesViewScreen}
+      />
+    </Stack.Navigator>
+  );
+}
+
 const AppShell = () => {
   const smb = useSmb();
   const modals = useModalStack();
@@ -32,7 +83,6 @@ const AppShell = () => {
   const fileOperations = useFileOperations(smb.smb, smb.currentPath, smb.loadFiles, smb.setIsLoading, smb.showAlert);
   const fileInfo = useFileInfo(smb.smb, smb.currentPath, smb.showAlert);
 
-  const [pendingBulkMove, setPendingBulkMove] = useState(null);
   const [trackedDownloadTask, setTrackedDownloadTask] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
 
@@ -73,9 +123,9 @@ const AppShell = () => {
   };
 
   const handleFolderSelect = async (destinationPath) => {
-    if (pendingBulkMove) {
-      const { items, onDone } = pendingBulkMove;
-      setPendingBulkMove(null);
+    const bulkMove = modals.takeBulkMovePayload();
+    if (bulkMove) {
+      const { items, onDone } = bulkMove;
       modals.closeFolderPicker();
       if (typeof onDone === 'function') onDone();
       await fileOperations.moveFiles(items, destinationPath);
@@ -85,50 +135,6 @@ const AppShell = () => {
     const destinationWithFile = destinationPath === '/' ? `/${modals.selectedFile.name}` : `${destinationPath}/${modals.selectedFile.name}`;
     await fileOperations.executeFileOperation(modals.selectedFile, 'move', destinationWithFile);
     modals.closeFolderPicker();
-  };
-
-  const FilesNavigator = () => {
-    const FilesScreenComponent = ({ navigation }) => (
-      <FilesScreen
-        navigation={navigation}
-        files={smb.filesList}
-        currentPath={smb.currentPath}
-        selectedShare={smb.selectedShare}
-        username={smb.currentUsername}
-        onLoadFiles={smb.loadFiles}
-        onFileAction={modals.openFileAction}
-        onFolderInfo={fileInfo.showCurrentFolderInfo}
-        onCreateFolder={fileOperations.createFolder}
-        onUploadFile={fileOperations.uploadFile}
-        onRefresh={() => smb.loadFiles(smb.currentPath)}
-        onBack={smb.handleBackToShares}
-        onLogout={smb.handleBackToLogin}
-        isLoading={smb.isLoading}
-        showAlert={smb.showAlert}
-        showPrompt={smb.showPrompt}
-        onBulkDownload={(items) => fileOperations.downloadFiles(items, { autoShare: false })}
-        onBulkDuplicate={(items) => fileOperations.duplicateFiles(items)}
-        onBulkDelete={(items) => fileOperations.deleteFiles(items)}
-        onBulkMove={(items, onDone) => {
-          setPendingBulkMove({ items, onDone });
-          modals.openFolderPicker();
-        }}
-        sortBy={smb.prefs.sortBy}
-        sortOrder={smb.prefs.sortOrder}
-        showHidden={smb.prefs.showHidden}
-        onChangeSort={(sortBy, sortOrder) => smb.updatePrefs({ sortBy, sortOrder })}
-        onToggleHidden={(showHidden) => smb.updatePrefs({ showHidden })}
-      />
-    );
-
-    return (
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-        <Stack.Screen
-          name="FilesView"
-          component={FilesScreenComponent}
-        />
-      </Stack.Navigator>
-    );
   };
 
   const renderScreen = () => {

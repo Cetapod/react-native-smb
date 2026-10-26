@@ -16,6 +16,8 @@ export const SmbProvider = ({ children }) => {
   const [smb, setSmb] = useState(null);
   const [moduleError, setModuleError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  /** Directory listing in progress (streaming); not used for login/share spinners. */
+  const [isListing, setIsListing] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   useEffect(() => {
@@ -79,39 +81,99 @@ export const SmbProvider = ({ children }) => {
     }
   }, [smb]);
 
+  // The listing currently feeding filesList; a newer load cancels and replaces it.
+  const listTaskRef = useRef(null);
+  const loadGenerationRef = useRef(0);
+
+  const cancelListing = useCallback(() => {
+    listTaskRef.current?.cancel();
+    listTaskRef.current = null;
+  }, []);
+
+  // Streams entries into filesList as batches arrive. Resolves false when superseded.
+  const streamDirectory = useCallback(
+    async (path) => {
+      cancelListing();
+      setFilesList([]);
+      const task = smb.listDirectory(path, false, -1);
+      listTaskRef.current = task;
+      const isCurrent = () => listTaskRef.current === task;
+
+      let pending = [];
+      let flushTimer = null;
+      const flushPending = () => {
+        if (!isCurrent() || pending.length === 0) return;
+        const chunk = pending;
+        pending = [];
+        setFilesList((prev) => prev.concat(chunk));
+      };
+      const scheduleFlush = () => {
+        if (flushTimer != null) return;
+        flushTimer = setTimeout(() => {
+          flushTimer = null;
+          flushPending();
+        }, 100);
+      };
+
+      const unsubscribe = task.subscribeEntries((batch) => {
+        if (!isCurrent()) return;
+        pending.push(...batch);
+        scheduleFlush();
+      });
+      try {
+        await task.wait();
+        if (flushTimer != null) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        flushPending();
+        return isCurrent();
+      } catch (error) {
+        if (!isCurrent()) return false;
+        throw error;
+      } finally {
+        unsubscribe();
+        if (flushTimer != null) clearTimeout(flushTimer);
+        if (isCurrent()) listTaskRef.current = null;
+      }
+    },
+    [smb, cancelListing],
+  );
+
   const loadFiles = useCallback(
     async (path) => {
+      const generation = ++loadGenerationRef.current;
+      const isCurrentLoad = () => loadGenerationRef.current === generation;
+      cancelListing();
       setCurrentPath(path);
       setFilesList([]);
-      setIsLoading(true);
+      setIsListing(true);
 
       try {
         await ensureConnected();
-        const files = await smb.listDirectory(path, false, -1).result();
-        setFilesList(files || []);
+        if (!isCurrentLoad()) return;
+        await streamDirectory(path);
       } catch (error) {
+        if (!isCurrentLoad()) return;
         if (path === '/' && currentUsername && isAccessDeniedError(error)) {
           try {
             const userPath = `/${currentUsername}`;
-            const files = await smb.listDirectory(userPath, false, -1).result();
-            setFilesList(files || []);
             setCurrentPath(userPath);
-            setIsLoading(false);
-            showAlert('Info', 'Root directory not accessible. Showing your home directory instead.');
+            if (await streamDirectory(userPath)) {
+              showAlert('Info', 'Root directory not accessible. Showing your home directory instead.');
+            }
             return;
           } catch {
-            setIsLoading(false);
-            handleSMBError(error, 'loadFiles', `directory "${path}"`, showAlert);
+            if (isCurrentLoad()) handleSMBError(error, 'loadFiles', `directory "${path}"`, showAlert);
             return;
           }
         }
-        setIsLoading(false);
         handleSMBError(error, 'loadFiles', `directory "${path}"`, showAlert);
       } finally {
-        setIsLoading(false);
+        if (isCurrentLoad()) setIsListing(false);
       }
     },
-    [smb, currentUsername, ensureConnected, setIsLoading, showAlert],
+    [currentUsername, ensureConnected, cancelListing, streamDirectory, showAlert],
   );
 
   const checkAndNavigateToHomeDirectory = useCallback(
@@ -219,8 +281,16 @@ export const SmbProvider = ({ children }) => {
     [smb, setIsLoading, showAlert, ensureConnected, checkAndNavigateToHomeDirectory, currentUsername],
   );
 
+  // Stop the visible listing and invalidate any load still in flight.
+  const abandonListing = useCallback(() => {
+    loadGenerationRef.current += 1;
+    cancelListing();
+  }, [cancelListing]);
+
   const handleBackToLogin = useCallback(async () => {
     if (!smb) return;
+    abandonListing();
+    setIsListing(false);
     setIsDisconnecting(true);
     try {
       await smb.disconnect().result();
@@ -235,20 +305,23 @@ export const SmbProvider = ({ children }) => {
     setCurrentUsername('');
     setFilesList([]);
     setCurrentPath('/');
-  }, [smb]);
+  }, [smb, abandonListing]);
 
   const handleBackToShares = useCallback(() => {
+    abandonListing();
+    setIsListing(false);
     setCurrentScreen('shares');
     setSelectedShare('');
     setFilesList([]);
     setCurrentPath('/');
-  }, []);
+  }, [abandonListing]);
 
   const value = useMemo(
     () => ({
       smb,
       moduleError,
       isLoading,
+      isListing,
       isDisconnecting,
       setIsLoading,
       alertConfig,
@@ -272,7 +345,7 @@ export const SmbProvider = ({ children }) => {
       prefs,
       updatePrefs,
     }),
-    [smb, moduleError, isLoading, isDisconnecting, setIsLoading, alertConfig, showAlert, showPrompt, hideAlert, currentScreen, sharesList, selectedShare, currentUsername, filesList, currentPath, loadFiles, loadShares, handleLogin, handleSelectShare, handleBackToLogin, handleBackToShares, ensureConnected, prefs, updatePrefs],
+    [smb, moduleError, isLoading, isListing, isDisconnecting, setIsLoading, alertConfig, showAlert, showPrompt, hideAlert, currentScreen, sharesList, selectedShare, currentUsername, filesList, currentPath, loadFiles, loadShares, handleLogin, handleSelectShare, handleBackToLogin, handleBackToShares, ensureConnected, prefs, updatePrefs],
   );
 
   return <SmbContext.Provider value={value}>{children}</SmbContext.Provider>;
