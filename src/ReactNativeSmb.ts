@@ -1,5 +1,5 @@
 import type { HybridObject } from 'react-native-nitro-modules';
-import type { SmbCredentials, NativeSmbTask } from './types';
+import type { SmbCredentials, NativeSmbListTask, NativeSmbTask } from './types';
 
 /**
  * A Nitro module that provides SMB client functionality using libsmb2
@@ -81,16 +81,22 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
 
   /**
    * Lists contents of a directory
+   * @param taskId Unique ID for the task
    * @param path Directory path (use "/" for root)
    * @param recursive Whether to list recursively (default: false)
    * @param maxDepth Maximum recursion depth (-1 = unlimited, 0 = current only)
    * @param includeSecurityDescriptor Whether to fetch each item's security descriptor
-   * @param taskId Unique ID for the task
-   * @param onStatusChange Callback for status updates
-   * @param onProgress Callback for progress updates
-   * @returns SmbTask resolving to array of file/directory info
+   * @param batchSize Non-recursive listings: entries per streamed batch (batches also flush every 100 ms)
+   * @returns SmbTask resolving to array of file/directory info; non-recursive listings also stream entries
    */
-  listDirectory(taskId: string, path: string, recursive: boolean, maxDepth: number, includeSecurityDescriptor: boolean): NativeSmbTask;
+  listDirectory(
+    taskId: string,
+    path: string,
+    recursive: boolean,
+    maxDepth: number,
+    includeSecurityDescriptor: boolean,
+    batchSize: number,
+  ): NativeSmbListTask;
 
 
   /**

@@ -162,3 +162,9 @@ export interface NativeSmbTask {
   unsubscribe(subscriptionId: string): void;
   getResultValue(): unknown;
 }
+
+export interface NativeSmbListTask extends NativeSmbTask {
+  /** Replays entries emitted so far as one batch, then delivers each live batch. */
+  subscribeEntries(listener: (entries: SmbFileInfo[]) => void): string;
+  unsubscribeEntries(subscriptionId: string): void;
+}

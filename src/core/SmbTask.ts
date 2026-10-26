@@ -1,7 +1,7 @@
 import { shapeTaskSnapshot } from '../bridge/decode';
 import { isTerminalStatus } from '../labels';
 import { TaskStatus, type NativeSmbTask, type SmbTaskState } from '../types';
-import { taskResult } from './taskResult';
+import { taskDone, taskResult } from './taskResult';
 
 /**
  * Handle for one native async operation.
@@ -109,6 +109,14 @@ export class SmbTask<T = void> {
    */
   result(): Promise<T> {
     return taskResult(this);
+  }
+
+  /**
+   * Await completion without reading the result value. Rejects like {@link result}.
+   * Useful when the data was already consumed incrementally (e.g. streamed listing entries).
+   */
+  wait(): Promise<void> {
+    return taskDone(this);
   }
 
   /** Like `Promise.allSettled` over {@link result}. */

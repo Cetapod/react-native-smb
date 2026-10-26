@@ -11,8 +11,11 @@ import type {
   SmbShare,
 } from '../types';
 import { generateTaskId } from './ids';
+import { SmbListTask } from './SmbListTask';
 import { SmbTask } from './SmbTask';
 import { TransferStore } from './TransferStore';
+
+const DEFAULT_LIST_BATCH_SIZE = 10;
 
 export class SmbClient {
   private readonly native: ReactNativeSmb;
@@ -73,8 +76,20 @@ export class SmbClient {
     return this.op((id) => this.native.listShares(id));
   }
 
-  listDirectory(path: string, recursive = false, maxDepth = -1, includeSecurityDescriptor = false): SmbTask<SmbFileInfo[]> {
-    return this.op((id) => this.native.listDirectory(id, path, recursive, maxDepth, includeSecurityDescriptor));
+  /**
+   * List a directory. Non-recursive listings stream entries via
+   * {@link SmbListTask.subscribeEntries}: a batch is pushed once `batchSize`
+   * entries are ready or 100 ms have passed (the first batch goes out immediately).
+   */
+  listDirectory(
+    path: string,
+    recursive = false,
+    maxDepth = -1,
+    includeSecurityDescriptor = false,
+    batchSize = DEFAULT_LIST_BATCH_SIZE,
+  ): SmbListTask {
+    const id = generateTaskId();
+    return new SmbListTask(id, this.native.listDirectory(id, path, recursive, maxDepth, includeSecurityDescriptor, batchSize));
   }
 
   getPathInfo(path: string): SmbTask<SmbFileInfo> {
