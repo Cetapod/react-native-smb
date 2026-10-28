@@ -55,15 +55,16 @@ Cross-task parallelism is the pool. Within a single transfer, `SmbFileIO` pipeli
 
 ## Listing pipeline
 
-A `listDirectory` with `maxDepth: 0` runs `DirectoryStreamer` on one Interactive slot instead of libsmb2's `smb2_opendir` (which reads the whole directory before returning):
+`listDirectory` runs `DirectoryLister` on one slot — Interactive for `maxDepth: 0`, Metadata for nested listings — instead of libsmb2's `smb2_opendir` (which reads the whole directory before returning):
 
 ```
 [CREATE + QUERY_DIRECTORY] → QUERY_DIRECTORY … → CLOSE       decode each reply as it arrives
-   └ per directory entry: [CREATE + QUERY_DIRECTORY] … CLOSE  childCount, up to 8 in flight
-   └ per entry (opt-in):  CREATE + QUERY_INFO + CLOSE         security descriptor
+   └ directory within maxDepth: same chain, decoded          expand into children
+   └ directory at the limit:    same chain, counted          childCount
+   └ per entry (opt-in):        CREATE + QUERY_INFO + CLOSE  security descriptor
 ```
 
-An entry is ready once its lookups finish; ready entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result. Listings with a non-zero `maxDepth` keep the parallel per-directory scan across Metadata slots.
+Lookups share one connection, up to 8 in flight; lookups found inside a subtree run first so earlier subtrees finish sooner. An entry is ready once its lookups finish — for an expanded directory, also all of its children, whose count becomes `childCount` without another query, so each directory is opened once. Ready top-level entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result.
 
 ## Diagnostics
 

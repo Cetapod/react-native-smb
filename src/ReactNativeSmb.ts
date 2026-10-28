@@ -85,8 +85,8 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
    * @param path Directory path (use "/" for root)
    * @param maxDepth Nested levels to include as children (0 = this level only, -1 = unlimited)
    * @param includeSecurityDescriptor Whether to fetch each item's security descriptor
-   * @param batchSize maxDepth 0 only: entries per streamed batch (batches also flush every 100 ms)
-   * @returns SmbTask resolving to array of file/directory info; maxDepth 0 also streams entries
+   * @param batchSize Top-level entries per streamed batch (batches also flush every 100 ms)
+   * @returns SmbTask resolving to array of file/directory info; top-level entries also stream
    */
   listDirectory(
     taskId: string,

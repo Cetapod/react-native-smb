@@ -94,7 +94,7 @@ function DownloadBar({ task }) {
 
 ## Stream listing entries
 
-`listDirectory` returns an `SmbListTask`. Besides status snapshots, a listing with `maxDepth: 0` (the default) pushes entry batches through a separate channel — no `progress` is involved:
+`listDirectory` returns an `SmbListTask`. Besides status snapshots, a listing pushes batches of top-level entries through a separate channel — no `progress` is involved:
 
 ```typescript
 const task = smb.listDirectory('/Media');

@@ -57,7 +57,7 @@ interface SmbFileInfo {
 interface ListDirectoryOptions {
   maxDepth?: number;                    // nested levels as `children`: 0 = this level only (default), -1 = unlimited
   includeSecurityDescriptor?: boolean;  // default false
-  batchSize?: number;                   // streaming (maxDepth 0) only; default 10
+  batchSize?: number;                   // top-level entries per streamed batch; default 10
 }
 ```
 
@@ -72,7 +72,7 @@ const firstDacl = files[0]?.securityDescriptor?.dacl;
 
 ### Streaming a listing
 
-A `listDirectory` with `maxDepth: 0` (the default) delivers entries while the directory is still being read, so large folders render before the scan finishes:
+`listDirectory` delivers top-level entries while the listing is still running, so large folders render before the scan finishes:
 
 ```typescript
 const task = smb.listDirectory('/Media');
@@ -91,7 +91,7 @@ try {
 - Subscribing late loses nothing: the first callback replays every entry emitted so far.
 - Entries arrive in server order. Sort in the UI if you need a stable order.
 - If the task fails or is cancelled, entries already received are an incomplete listing.
-- Listings with a non-zero `maxDepth` do not stream; use `result()`.
+- With a non-zero `maxDepth`, a top-level entry is emitted once its whole subtree is listed, carrying its complete `children`. Because entries keep server order, a large directory near the start delays every entry after it.
 
 ## Pool
 

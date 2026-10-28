@@ -78,10 +78,10 @@ export class SmbClient {
   }
 
   /**
-   * List a directory. With `maxDepth: 0` (default) entries also stream via
+   * List a directory. Top-level entries also stream via
    * {@link SmbListTask.subscribeEntries}: a batch is pushed once `batchSize`
    * entries are ready or 100 ms have passed (the first batch goes out immediately).
-   * A non-zero `maxDepth` returns a tree through `result()` only.
+   * With a non-zero `maxDepth`, each streamed entry carries its complete subtree.
    */
   listDirectory(path: string, options: ListDirectoryOptions = {}): SmbListTask {
     const { maxDepth = 0, includeSecurityDescriptor = false, batchSize = DEFAULT_LIST_BATCH_SIZE } = options;

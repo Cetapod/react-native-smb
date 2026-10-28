@@ -64,7 +64,7 @@ export interface ListDirectoryOptions {
   readonly maxDepth?: number;
   /** Fetch each item's security descriptor (default `false`). */
   readonly includeSecurityDescriptor?: boolean;
-  /** Streaming listings (`maxDepth: 0`) only: entries per batch (default 10). */
+  /** Top-level entries per streamed batch (default 10). */
   readonly batchSize?: number;
 }
 
