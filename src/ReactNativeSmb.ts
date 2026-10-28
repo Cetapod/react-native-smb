@@ -100,10 +100,8 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
   /**
    * Gets detailed information about a path (file or directory).
    * Generic version that handles both file/directory types.
-   * @param path Path to the item
    * @param taskId Unique ID for the task
-   * @param onStatusChange Callback for status updates
-   * @param onProgress Callback for progress updates
+   * @param path Path to the item
    * @returns SmbTask resolving to file information with a security descriptor when available
    */
   getPathInfo(taskId: string, path: string): NativeSmbTask;
@@ -111,8 +109,8 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
 
   /**
    * Retrieves security descriptor for a file/directory
-   * @param path Path to the item
    * @param taskId Unique ID for the task
+   * @param path Path to the item
    * @returns SmbTask resolving to security descriptor
    *
    * @example
@@ -132,8 +130,7 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
    * Uploads a file from local storage to the SMB server
    * @param localPath Local path to the file
    * @param remotePath Destination path on the server
-   * @param progressHandler Optional callback to track upload progress
-   * @returns SmbTask that resolves when upload completes
+   * @returns SmbTask that resolves when upload completes; subscribe for progress
    */
   uploadFile(taskId: string, localPath: string, remotePath: string): NativeSmbTask;
 
@@ -177,12 +174,11 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
 
   /**
    * Copies a file or directory on the SMB server
+   * @param taskId Unique ID for the task
    * @param fromPath Source path
    * @param toPath Destination path
    * @param recursive Whether to copy recursively
-   * @param taskId Unique ID for the task
-   * @param onStatusChange Callback for status updates
-   * @param onProgress Callback for progress updates
+   * @returns SmbTask that resolves when the copy completes; subscribe for progress
    */
   copyItem(taskId: string, fromPath: string, toPath: string, recursive: boolean): NativeSmbTask;
 
