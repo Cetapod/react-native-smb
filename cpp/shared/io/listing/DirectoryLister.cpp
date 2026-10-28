@@ -40,7 +40,8 @@ DirectoryLister::DirectoryLister(smb2_context* ctx, SmbConnectionManager& manage
       cancel_(std::move(cancel)),
       sink_(std::move(sink)),
       policy_(options.minBatch, options.maxDelay) {
-    options_.maxConcurrentLookups = std::max<size_t>(1, options_.maxConcurrentLookups);
+    options_.maxConcurrentDirQueries = std::max<size_t>(1, options_.maxConcurrentDirQueries);
+    options_.maxConcurrentSecurityQueries = std::max<size_t>(1, options_.maxConcurrentSecurityQueries);
 }
 
 DirectoryLister::~DirectoryLister() {
@@ -53,7 +54,7 @@ DirectoryLister::~DirectoryLister() {
 void DirectoryLister::run() {
     if (!ctx_) SmbException::raise(SmbErrorCode::NotConnected, "List Directory Failed: SMB context is not connected");
 
-    startedAt_ = lastActivity_ = Clock::now();
+    lastActivity_ = Clock::now();
     listing_ = std::make_unique<DirQuery>(
         ctx_, path_util::normalized(path_), [this](const uint8_t* buffer, uint32_t length) { return decodeEntries(nullptr, buffer, length); },
         [this](uint32_t status) { onListingDone(status); });
@@ -135,7 +136,7 @@ void DirectoryLister::pollOnce(Clock::time_point now) {
 
 bool DirectoryLister::finished() const {
     if (!opsIdle()) return false;
-    return stopping_ || (listingComplete_ && lookups_.empty() && roots_.empty());
+    return stopping_ || (listingComplete_ && dirLookups_.empty() && securityLookups_.empty() && roots_.empty());
 }
 
 bool DirectoryLister::opsIdle() const {
@@ -149,24 +150,22 @@ bool DirectoryLister::decodeEntries(Node* parent, const uint8_t* buffer, uint32_
 
     const int level = parent ? parent->level + 1 : 0;
     const std::string& basePath = parent ? parent->info.path : path_;
-    std::vector<Lookup> discovered;
 
-    const bool ok = forEachDirEntry(ctx_, buffer, length, [&](const smb2_fileidfulldirectoryinformation& info, const std::string& name) {
+    return forEachDirEntry(ctx_, buffer, length, [&](const smb2_fileidfulldirectoryinformation& info, const std::string& name) {
         auto node = std::make_unique<Node>();
         node->info = path_util::makeFileInfo(statFromDirEntry(info), name, path_util::buildUrl(basePath, name));
         node->parent = parent;
+        node->topLevel = parent ? parent->topLevel : topLevelCount_++;
         node->level = level;
         if (node->info.isDirectory) {
             node->expanded = options_.maxDepth < 0 || level < options_.maxDepth;
-            discovered.push_back({node->expanded ? LookupKind::Expand : LookupKind::ChildCount, node.get()});
+            dirLookups_.emplace(node->topLevel, Lookup{node->expanded ? LookupKind::Expand : LookupKind::ChildCount, node.get()});
             ++node->outstanding;
-            ++stats_.directories;
         }
         if (options_.includeSecurityDescriptor) {
-            discovered.push_back({LookupKind::SecurityDescriptor, node.get()});
+            securityLookups_.emplace(node->topLevel, Lookup{LookupKind::SecurityDescriptor, node.get()});
             ++node->outstanding;
         }
-        ++stats_.entries;
 
         if (!parent) {
             roots_.push_back(std::move(node));
@@ -175,16 +174,11 @@ bool DirectoryLister::decodeEntries(Node* parent, const uint8_t* buffer, uint32_
         if (node->outstanding > 0) ++parent->outstanding;
         parent->children.push_back(std::move(node));
     });
-
-    // Subtree lookups run first so earlier subtrees complete (and emit) sooner.
-    lookups_.insert(parent ? lookups_.begin() : lookups_.end(), discovered.begin(), discovered.end());
-    return ok;
 }
 
 void DirectoryLister::onListingDone(uint32_t status) {
     if (status == SMB2_STATUS_SUCCESS) {
         listingComplete_ = true;
-        ++stats_.listedDirectories;
         return;
     }
     if (stopping_) return;
@@ -194,14 +188,18 @@ void DirectoryLister::onListingDone(uint32_t status) {
 
 // MARK: - Lookups
 
+// Lookups start in top-level order so earlier entries (with their subtrees)
+// become ready first; directory queries go on the wire before security descriptors.
 void DirectoryLister::launchLookups() {
-    while (!lookups_.empty() && !stopping_ && dirOps_.size() + securityOps_.size() < options_.maxConcurrentLookups) {
-        const Lookup lookup = lookups_.front();
-        lookups_.pop_front();
-        if (lookup.kind == LookupKind::SecurityDescriptor)
-            startSecurityDescriptor(lookup.node);
-        else
-            startDirOp(lookup);
+    while (!dirLookups_.empty() && !stopping_ && dirOps_.size() < options_.maxConcurrentDirQueries) {
+        const Lookup lookup = dirLookups_.begin()->second;
+        dirLookups_.erase(dirLookups_.begin());
+        startDirOp(lookup);
+    }
+    while (!securityLookups_.empty() && !stopping_ && securityOps_.size() < options_.maxConcurrentSecurityQueries) {
+        const Lookup lookup = securityLookups_.begin()->second;
+        securityLookups_.erase(securityLookups_.begin());
+        startSecurityDescriptor(lookup.node);
     }
 }
 
@@ -244,7 +242,6 @@ void DirectoryLister::onDirOpDone(DirOp& op, uint32_t status) {
             fail(codeForStatus(status, message), message);
             return;
         }
-        ++stats_.listedDirectories;
     } else if (status == SMB2_STATUS_SUCCESS) {
         node->info.childCount = op.count;
     } else {
@@ -332,8 +329,6 @@ void DirectoryLister::flush(Clock::time_point now) {
     readyCursor_ = 0;
 
     policy_.markFlushed(now);
-    ++stats_.batches;
-    if (!stats_.firstBatchAfter) stats_.firstBatchAfter = std::chrono::duration_cast<std::chrono::milliseconds>(now - startedAt_);
     sink_(std::move(batch));
 }
 
@@ -348,7 +343,8 @@ void DirectoryLister::stopAll() {
     if (stopping_) return;
     stopping_ = true;
     drainDeadline_ = Clock::now() + kDrainTimeout;
-    lookups_.clear();
+    dirLookups_.clear();
+    securityLookups_.clear();
     if (listing_) listing_->stop();
     for (auto& op : dirOps_) op->query->stop();
 }

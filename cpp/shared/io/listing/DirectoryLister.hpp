@@ -6,6 +6,7 @@
 #include <deque>
 #include <functional>
 #include <list>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,9 +32,11 @@ struct DirectoryListOptions {
     int maxDepth{0};
     size_t minBatch{10};
     std::chrono::milliseconds maxDelay{100};
-    // Directory expansions, childCount and security-descriptor lookups in flight
-    // on the same connection.
-    size_t maxConcurrentLookups{8};
+    // Directory expansions and child counts in flight on the connection. They
+    // hold a directory handle and shape the tree, so they are scheduled first.
+    size_t maxConcurrentDirQueries{16};
+    // Security-descriptor lookups in flight; each is one self-closing compound.
+    size_t maxConcurrentSecurityQueries{32};
     bool includeSecurityDescriptor{false};
 };
 
@@ -45,7 +48,9 @@ struct DirectoryListOptions {
 // a directory at the depth limit, and the optional security descriptor. An
 // expanded directory also waits for each of its children; once done its
 // children move into `children` and childCount is their number, so every
-// directory is opened exactly once. Lookups are pipelined on the connection.
+// directory is opened exactly once. Lookups are pipelined on the connection;
+// directory queries and security descriptors have separate in-flight limits and
+// run in top-level order, so earlier top-level entries become ready first.
 //
 // Top-level entries are pushed to the sink in server order according to
 // BatchPolicy, each with its complete subtree. All libsmb2 callbacks run on the
@@ -53,14 +58,6 @@ struct DirectoryListOptions {
 class DirectoryLister {
    public:
     using Sink = std::function<void(std::vector<SmbFileInfo>&&)>;
-
-    struct Stats {
-        size_t entries{0};
-        size_t directories{0};
-        size_t listedDirectories{0};
-        size_t batches{0};
-        std::optional<std::chrono::milliseconds> firstBatchAfter;
-    };
 
     DirectoryLister(smb2_context* ctx, SmbConnectionManager& manager, std::string path, DirectoryListOptions options, CancellationToken cancel,
                     Sink sink);
@@ -72,14 +69,13 @@ class DirectoryLister {
     // failure (entries already emitted are then incomplete).
     void run();
 
-    const Stats& stats() const { return stats_; }
-
    private:
     using Clock = std::chrono::steady_clock;
 
     struct Node {
         SmbFileInfo info;
         Node* parent{nullptr};
+        size_t topLevel{0};  // index of the top-level entry this node belongs to
         int level{0};        // top-level entries are 0
         int outstanding{0};  // unfinished lookups + unfinished children
         bool expanded{false};
@@ -90,6 +86,8 @@ class DirectoryLister {
         LookupKind kind;
         Node* node;
     };
+    // Keyed by top-level index; equal keys keep insertion (discovery) order.
+    using LookupQueue = std::multimap<size_t, Lookup>;
     // An expansion or child count: one DirQuery whose replies are decoded or counted.
     struct DirOp {
         LookupKind kind{LookupKind::Expand};
@@ -144,8 +142,11 @@ class DirectoryLister {
 
     std::deque<std::unique_ptr<Node>> roots_;  // top-level entries not yet emitted (server order)
     size_t readyCursor_{0};                    // roots_[0, readyCursor_) are ready
+    size_t topLevelCount_{0};                  // top-level entries decoded so far
 
-    std::deque<Lookup> lookups_;  // not yet started; subtree lookups go first
+    // Not yet started.
+    LookupQueue dirLookups_;
+    LookupQueue securityLookups_;
     std::list<std::unique_ptr<DirOp>> dirOps_;
     std::list<std::unique_ptr<SecurityOp>> securityOps_;
 
@@ -153,9 +154,7 @@ class DirectoryLister {
     bool cancelled_{false};
     std::optional<Failure> failure_;
     std::optional<Clock::time_point> drainDeadline_;
-    Clock::time_point startedAt_;
     Clock::time_point lastActivity_;
-    Stats stats_;
 };
 
 }  // namespace listing

@@ -64,7 +64,7 @@ Cross-task parallelism is the pool. Within a single transfer, `SmbFileIO` pipeli
    └ per entry (opt-in):        CREATE + QUERY_INFO + CLOSE  security descriptor
 ```
 
-Lookups share one connection, up to 8 in flight; lookups found inside a subtree run first so earlier subtrees finish sooner. An entry is ready once its lookups finish — for an expanded directory, also all of its children, whose count becomes `childCount` without another query, so each directory is opened once. Ready top-level entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result.
+Lookups share one connection: up to 16 directory queries (expansions and counts) and, separately, up to 32 security-descriptor queries in flight. Lookups start in top-level order — everything under an earlier top-level entry before anything under a later one — and directory queries go on the wire before security descriptors. An entry is ready once its lookups finish — for an expanded directory, also all of its children, whose count becomes `childCount` without another query, so each directory is opened once. Ready top-level entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result.
 
 ## Diagnostics
 
