@@ -21,7 +21,7 @@ namespace tree_ops {
 // Depth-first collect of every descendant (children appended before parent so
 // callers can rmdir deepest-first). Any descendant failure aborts the operation.
 inline void collectAllItems(smb2_context* ctx, const std::string& path, std::vector<SmbFileInfo>& allItems, const CancellationToken& cancel) {
-    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, false, 0, cancel);
+    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, 0, cancel);
     for (const auto& item : contents) {
         if (item.isDirectory) collectAllItems(ctx, item.path, allItems, cancel);
         allItems.push_back(item);
@@ -42,7 +42,7 @@ inline int64_t calculateTotalSize(smb2_context* ctx, const std::string& path, bo
     if (!recursive) return 0;
 
     int64_t total = 0;
-    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, false, 0, cancel);
+    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, 0, cancel);
     for (const auto& item : contents) {
         if (item.isDirectory)
             total += calculateTotalSize(ctx, item.path, true, cancel);
@@ -79,7 +79,7 @@ inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& 
         if (isClean) baseName = baseName.substr(0, copyPos);
     }
 
-    std::vector<SmbFileInfo> existingFiles = listOnCtx(ctx, parentPath, false, 0, cancel);
+    std::vector<SmbFileInfo> existingFiles = listOnCtx(ctx, parentPath, 0, cancel);
     std::vector<std::string> existingNames;
     existingNames.reserve(existingFiles.size());
     for (const auto& item : existingFiles) existingNames.push_back(item.name);

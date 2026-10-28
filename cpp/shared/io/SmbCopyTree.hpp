@@ -121,7 +121,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         std::function<void(const std::string&, const std::string&)> walk = [&](const std::string& srcDir,
                                                                                const std::string& dstDir) {
             if (cancel.cancelled()) return;
-            std::vector<SmbFileInfo> contents = listOnCtx(ctx, srcDir, false, 0, cancel);
+            std::vector<SmbFileInfo> contents = listOnCtx(ctx, srcDir, 0, cancel);
             for (const auto& item : contents) {
                 if (cancel.cancelled()) return;
                 std::string destItem = path_util::buildUrl(dstDir, item.name);

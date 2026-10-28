@@ -90,18 +90,17 @@ inline std::vector<SmbFileInfo> scanDirectoryOnCtx(smb2_context* ctx, const std:
     return files;
 }
 
-// Directory listing on a single smb2_context with optional serial recursion.
-inline std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, const std::string& path, bool recursive, int maxDepth, const CancellationToken& cancel) {
+// Directory listing on a single smb2_context with serial recursion.
+// maxDepth: 0 = this level only, -1 = unlimited, N = N nested levels of children.
+inline std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, const std::string& path, int maxDepth, const CancellationToken& cancel) {
     std::vector<SmbFileInfo> files = scanDirectoryOnCtx(ctx, path, cancel);
     if (cancel.cancelled()) return {};
 
-    if (recursive && maxDepth != 0) {
+    if (maxDepth != 0) {
+        const int childDepth = (maxDepth > 0) ? maxDepth - 1 : maxDepth;
         for (auto& item : files) {
             if (cancel.cancelled()) return {};
-            if (item.isDirectory) {
-                int newMaxDepth = (maxDepth > 0) ? maxDepth - 1 : maxDepth;
-                item.children = listOnCtx(ctx, item.path, true, newMaxDepth, cancel);
-            }
+            if (item.isDirectory) item.children = listOnCtx(ctx, item.path, childDepth, cancel);
         }
     }
     return files;
