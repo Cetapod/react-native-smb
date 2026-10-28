@@ -41,7 +41,7 @@ const smb = SMB();
 const creds: SmbCredentials = { username: 'user', password: 'pass' };
 
 await smb.connect('smb://192.168.1.100/Media', creds).result();
-const entries = await smb.listDirectory('/', false).result();
+const entries = await smb.listDirectory('/').result();
 
 const task = smb.downloadFile('/video.mp4', '/local/video.mp4');
 task.subscribe((snap) => console.log(snap.progress));

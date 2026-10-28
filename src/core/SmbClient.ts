@@ -2,6 +2,7 @@ import { NitroModules } from 'react-native-nitro-modules';
 import { shapePoolInfo } from '../bridge/decode';
 import type { ReactNativeSmb } from '../ReactNativeSmb';
 import type {
+  ListDirectoryOptions,
   NativeSmbTask,
   PoolInfo,
   SmbConnectionInfo,
@@ -77,19 +78,15 @@ export class SmbClient {
   }
 
   /**
-   * List a directory. Non-recursive listings stream entries via
+   * List a directory. With `maxDepth: 0` (default) entries also stream via
    * {@link SmbListTask.subscribeEntries}: a batch is pushed once `batchSize`
    * entries are ready or 100 ms have passed (the first batch goes out immediately).
+   * A non-zero `maxDepth` returns a tree through `result()` only.
    */
-  listDirectory(
-    path: string,
-    recursive = false,
-    maxDepth = -1,
-    includeSecurityDescriptor = false,
-    batchSize = DEFAULT_LIST_BATCH_SIZE,
-  ): SmbListTask {
+  listDirectory(path: string, options: ListDirectoryOptions = {}): SmbListTask {
+    const { maxDepth = 0, includeSecurityDescriptor = false, batchSize = DEFAULT_LIST_BATCH_SIZE } = options;
     const id = generateTaskId();
-    return new SmbListTask(id, this.native.listDirectory(id, path, recursive, maxDepth, includeSecurityDescriptor, batchSize));
+    return new SmbListTask(id, this.native.listDirectory(id, path, maxDepth, includeSecurityDescriptor, batchSize));
   }
 
   getPathInfo(path: string): SmbTask<SmbFileInfo> {

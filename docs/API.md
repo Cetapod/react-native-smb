@@ -32,7 +32,7 @@ interface SmbShare { name: string; comment: string; }
 
 | Method | Returns | `result()` type | Notes |
 | ------ | ------- | --------------- | ----- |
-| `listDirectory(path, recursive?, maxDepth?, includeSecurityDescriptor?, batchSize?)` | `SmbListTask` | `SmbFileInfo[]` | `maxDepth: -1` = unlimited; SD defaults to `false`; `batchSize` defaults to `10` |
+| `listDirectory(path, options?)` | `SmbListTask` | `SmbFileInfo[]` | See `ListDirectoryOptions` below |
 | `getPathInfo(path)` | `SmbTask<SmbFileInfo>` | `SmbFileInfo` | Includes SD when available |
 | `downloadFile(remote, local)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
 | `uploadFile(local, remote)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
@@ -53,18 +53,26 @@ interface SmbFileInfo {
 }
 ```
 
-Set `includeSecurityDescriptor` to `true` to issue an additional SD query for each returned item, including recursive children. If an item's SD query fails, the item remains in the result without `securityDescriptor`.
+```typescript
+interface ListDirectoryOptions {
+  maxDepth?: number;                    // nested levels as `children`: 0 = this level only (default), -1 = unlimited
+  includeSecurityDescriptor?: boolean;  // default false
+  batchSize?: number;                   // streaming (maxDepth 0) only; default 10
+}
+```
+
+Set `includeSecurityDescriptor` to `true` to issue an additional SD query for each returned item, including nested children. If the account is denied access to an item's SD, the item remains in the result without `securityDescriptor`; any other SD failure fails the listing.
 
 `getPathInfo` always attempts the SD query for its item. If that query fails, path metadata is still returned without `securityDescriptor`.
 
 ```typescript
-const files = await smb.listDirectory('/', false, -1, true).result();
+const files = await smb.listDirectory('/', { includeSecurityDescriptor: true }).result();
 const firstDacl = files[0]?.securityDescriptor?.dacl;
 ```
 
 ### Streaming a listing
 
-A non-recursive `listDirectory` delivers entries while the directory is still being read, so large folders render before the scan finishes:
+A `listDirectory` with `maxDepth: 0` (the default) delivers entries while the directory is still being read, so large folders render before the scan finishes:
 
 ```typescript
 const task = smb.listDirectory('/Media');
@@ -83,7 +91,7 @@ try {
 - Subscribing late loses nothing: the first callback replays every entry emitted so far.
 - Entries arrive in server order. Sort in the UI if you need a stable order.
 - If the task fails or is cancelled, entries already received are an incomplete listing.
-- Recursive listings (`recursive: true`, `maxDepth !== 0`) do not stream; use `result()`.
+- Listings with a non-zero `maxDepth` do not stream; use `result()`.
 
 ## Pool
 
@@ -143,7 +151,7 @@ See [Connection pool](./ARCHITECTURE.md).
 | 301 | `NoSpace` | Local or remote storage is full. |
 | 302 | `Io` | Other local or remote I/O failure. |
 
-Recursive listing, copy, duplicate, and delete fail on the first descendant failure; they never return a silent partial success. Security descriptors are omitted only when the account is denied descriptor access.
+Nested listing (`maxDepth != 0`), copy, duplicate, and delete fail on the first descendant failure; they never return a silent partial success. Security descriptors are omitted only when the account is denied descriptor access.
 
 ### Hooks
 

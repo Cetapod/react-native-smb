@@ -33,8 +33,8 @@ Metadata never uses slot 0. Interactive work can overflow to slots 1–3 when sl
 
 | Mode | Operators |
 | ---- | --------- |
-| `Interactive` | `getPathInfo`, shallow `listDirectory`, `moveItem`, `renameItem`, `createDirectory`, `getSecurityDescriptor`, `listShares` |
-| `Metadata` | `downloadFile`, `uploadFile`, `copyItem`, `duplicateItem`, `deleteItem`, recursive `listDirectory` |
+| `Interactive` | `getPathInfo`, `listDirectory` (`maxDepth: 0`), `moveItem`, `renameItem`, `createDirectory`, `getSecurityDescriptor`, `listShares` |
+| `Metadata` | `downloadFile`, `uploadFile`, `copyItem`, `duplicateItem`, `deleteItem`, `listDirectory` (`maxDepth != 0`) |
 
 FIFO queue per mode.
 
@@ -55,7 +55,7 @@ Cross-task parallelism is the pool. Within a single transfer, `SmbFileIO` pipeli
 
 ## Listing pipeline
 
-A non-recursive `listDirectory` runs `DirectoryStreamer` on one Interactive slot instead of libsmb2's `smb2_opendir` (which reads the whole directory before returning):
+A `listDirectory` with `maxDepth: 0` runs `DirectoryStreamer` on one Interactive slot instead of libsmb2's `smb2_opendir` (which reads the whole directory before returning):
 
 ```
 [CREATE + QUERY_DIRECTORY] → QUERY_DIRECTORY … → CLOSE       decode each reply as it arrives
@@ -63,7 +63,7 @@ A non-recursive `listDirectory` runs `DirectoryStreamer` on one Interactive slot
    └ per entry (opt-in):  CREATE + QUERY_INFO + CLOSE         security descriptor
 ```
 
-An entry is ready once its lookups finish; ready entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result. Recursive listings keep the parallel per-directory scan across Metadata slots.
+An entry is ready once its lookups finish; ready entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result. Listings with a non-zero `maxDepth` keep the parallel per-directory scan across Metadata slots.
 
 ## Diagnostics
 

@@ -2,8 +2,8 @@ import type { NativeSmbListTask, SmbFileInfo } from '../types';
 import { SmbTask } from './SmbTask';
 
 /**
- * Task returned by `listDirectory`. Non-recursive listings deliver entries in
- * batches while the directory is still being read; `result()` still resolves
+ * Task returned by `listDirectory`. Listings with `maxDepth: 0` deliver entries
+ * in batches while the directory is still being read; `result()` still resolves
  * with the complete list.
  */
 export class SmbListTask extends SmbTask<SmbFileInfo[]> {
@@ -19,7 +19,7 @@ export class SmbListTask extends SmbTask<SmbFileInfo[]> {
    * call delivers every entry emitted so far, so subscribing late loses nothing.
    * Each entry is final (directories already carry `childCount`).
    *
-   * Recursive listings do not stream; use {@link result} instead.
+   * Listings with a non-zero `maxDepth` do not stream; use {@link result} instead.
    * Entries received before a failure or cancellation are an incomplete listing.
    *
    * @example

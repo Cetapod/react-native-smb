@@ -21,7 +21,7 @@ const creds: SmbCredentials = { username: 'user', password: 'pass' };
 
 await smb.connect('smb://192.168.1.100/Share', creds).result();
 
-const files = await smb.listDirectory('/', false, -1).result();
+const files = await smb.listDirectory('/').result();
 await smb.downloadFile('/doc.pdf', '/local/doc.pdf').result();
 ```
 
@@ -94,7 +94,7 @@ function DownloadBar({ task }) {
 
 ## Stream listing entries
 
-`listDirectory` returns an `SmbListTask`. Besides status snapshots, a non-recursive listing pushes entry batches through a separate channel — no `progress` is involved:
+`listDirectory` returns an `SmbListTask`. Besides status snapshots, a listing with `maxDepth: 0` (the default) pushes entry batches through a separate channel — no `progress` is involved:
 
 ```typescript
 const task = smb.listDirectory('/Media');

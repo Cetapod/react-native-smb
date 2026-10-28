@@ -104,7 +104,7 @@ export class SmbTask<T = void> {
    * Await the typed result. Subscribes only when called — not at task creation.
    *
    * @example
-   * const task = smb.listDirectory('/', false, -1);
+   * const task = smb.listDirectory('/');
    * const files = await task.result();
    */
   result(): Promise<T> {

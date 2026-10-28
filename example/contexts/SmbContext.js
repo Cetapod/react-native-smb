@@ -95,7 +95,7 @@ export const SmbProvider = ({ children }) => {
     async (path) => {
       cancelListing();
       setFilesList([]);
-      const task = smb.listDirectory(path, false, -1);
+      const task = smb.listDirectory(path);
       listTaskRef.current = task;
       const isCurrent = () => listTaskRef.current === task;
 
@@ -179,7 +179,7 @@ export const SmbProvider = ({ children }) => {
   const checkAndNavigateToHomeDirectory = useCallback(
     async (username) => {
       try {
-        const files = await smb.listDirectory('/', false, -1).result();
+        const files = await smb.listDirectory('/').result();
         const homeDirectory = files.find((file) => file.isDirectory && file.name.toLowerCase() === username.toLowerCase());
 
         if (homeDirectory) {

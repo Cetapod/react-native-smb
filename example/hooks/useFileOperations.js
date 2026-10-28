@@ -24,7 +24,7 @@ export const useFileOperations = (SMB, currentPath, loadFiles, setIsLoading, sho
 
   const checkFileExists = async (fileName) => {
     try {
-      const files = await SMB.listDirectory(currentPath, false, -1).result();
+      const files = await SMB.listDirectory(currentPath).result();
       return files.some((file) => file.name === fileName);
     } catch (error) {
       console.warn('checkFileExists failed:', error);
@@ -89,7 +89,7 @@ export const useFileOperations = (SMB, currentPath, loadFiles, setIsLoading, sho
         const action = await promptOnFileConflict(finalName);
         if (action === 'cancel') continue;
         if (action === 'keep-both') {
-          const existing = await SMB.listDirectory(currentPath, false, -1).result();
+          const existing = await SMB.listDirectory(currentPath).result();
           finalName = generateUniqueName(
             asset.name,
             existing.map((f) => f.name),

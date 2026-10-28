@@ -59,6 +59,15 @@ export interface SmbFileInfo {
   readonly securityDescriptor?: SmbSecurityDescriptor;
 }
 
+export interface ListDirectoryOptions {
+  /** Nested levels to include as `children`: 0 = this level only (default), -1 = unlimited. */
+  readonly maxDepth?: number;
+  /** Fetch each item's security descriptor (default `false`). */
+  readonly includeSecurityDescriptor?: boolean;
+  /** Streaming listings (`maxDepth: 0`) only: entries per batch (default 10). */
+  readonly batchSize?: number;
+}
+
 export interface SmbAce {
   readonly aceType: string;
   readonly aceFlags: string[];

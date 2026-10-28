@@ -23,7 +23,7 @@ const FolderPickerModal = ({ visible, onClose, onSelect, currentPath, SMB, initi
   const loadItems = async (path) => {
     try {
       setIsLoading(true);
-      const files = await SMB.listDirectory(path, false, -1).result();
+      const files = await SMB.listDirectory(path).result();
       const sortedFiles = files.sort((a, b) => {
         if (a.isDirectory && !b.isDirectory) return -1;
         if (!a.isDirectory && b.isDirectory) return 1;
@@ -34,7 +34,7 @@ const FolderPickerModal = ({ visible, onClose, onSelect, currentPath, SMB, initi
       if (path === '/' && currentUsername && isAccessDeniedError(error)) {
         try {
           const userPath = `/${currentUsername}`;
-          const files = await SMB.listDirectory(userPath, false, -1).result();
+          const files = await SMB.listDirectory(userPath).result();
           const sortedFiles = files.sort((a, b) => {
             if (a.isDirectory && !b.isDirectory) return -1;
             if (!a.isDirectory && b.isDirectory) return 1;
