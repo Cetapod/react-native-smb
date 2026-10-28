@@ -79,7 +79,6 @@ class DirectoryStreamer {
     struct ChildCountOp {
         uint64_t seq{0};
         int64_t count{0};
-        bool malformed{false};
         std::unique_ptr<DirQuery> query;
     };
     struct SecurityOp {
