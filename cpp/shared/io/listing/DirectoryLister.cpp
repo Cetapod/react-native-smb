@@ -1,4 +1,4 @@
-#include "DirectoryStreamer.hpp"
+#include "DirectoryLister.hpp"
 
 #include <poll.h>
 #include <smb2/libsmb2.h>
@@ -31,8 +31,8 @@ SmbErrorCode codeForStatus(uint32_t status, const std::string& message) {
 }
 }  // namespace
 
-DirectoryStreamer::DirectoryStreamer(smb2_context* ctx, SmbConnectionManager& manager, std::string path, DirectoryStreamOptions options,
-                                     CancellationToken cancel, Sink sink)
+DirectoryLister::DirectoryLister(smb2_context* ctx, SmbConnectionManager& manager, std::string path, DirectoryListOptions options,
+                                 CancellationToken cancel, Sink sink)
     : ctx_(ctx),
       manager_(manager),
       path_(std::move(path)),
@@ -43,19 +43,19 @@ DirectoryStreamer::DirectoryStreamer(smb2_context* ctx, SmbConnectionManager& ma
     options_.maxConcurrentLookups = std::max<size_t>(1, options_.maxConcurrentLookups);
 }
 
-DirectoryStreamer::~DirectoryStreamer() {
+DirectoryLister::~DirectoryLister() {
     // Pending callbacks point into this object: tear the transport down first.
     if (ctx_ && !opsIdle()) invalidate();
 }
 
 // MARK: - Run loop
 
-void DirectoryStreamer::run() {
+void DirectoryLister::run() {
     if (!ctx_) SmbException::raise(SmbErrorCode::NotConnected, "List Directory Failed: SMB context is not connected");
 
     startedAt_ = lastActivity_ = Clock::now();
     listing_ = std::make_unique<DirQuery>(
-        ctx_, path_util::normalized(path_), [this](const uint8_t* buffer, uint32_t length) { return onListingChunk(buffer, length); },
+        ctx_, path_util::normalized(path_), [this](const uint8_t* buffer, uint32_t length) { return decodeEntries(nullptr, buffer, length); },
         [this](uint32_t status) { onListingDone(status); });
     if (!listing_->start()) {
         SmbException::raiseFromSmb(ctx_, -1, "List Directory Failed: Could not queue directory query for '" + path_ + "'. Error: " +
@@ -93,7 +93,7 @@ void DirectoryStreamer::run() {
     if (failure_) throw SmbException(failure_->code, failure_->message);
 }
 
-void DirectoryStreamer::pollOnce(Clock::time_point now) {
+void DirectoryLister::pollOnce(Clock::time_point now) {
     auto timeout = std::chrono::duration_cast<std::chrono::milliseconds>(kPollInterval);
     if (!stopping_) {
         if (const auto deadline = policy_.deadline(readyCount())) {
@@ -133,39 +133,58 @@ void DirectoryStreamer::pollOnce(Clock::time_point now) {
     }
 }
 
-bool DirectoryStreamer::finished() const {
+bool DirectoryLister::finished() const {
     if (!opsIdle()) return false;
-    return stopping_ || (listingComplete_ && lookups_.empty() && pending_.empty());
+    return stopping_ || (listingComplete_ && lookups_.empty() && roots_.empty());
 }
 
-bool DirectoryStreamer::opsIdle() const {
-    return (!listing_ || listing_->idle()) && countOps_.empty() && securityOps_.empty();
+bool DirectoryLister::opsIdle() const {
+    return (!listing_ || listing_->idle()) && dirOps_.empty() && securityOps_.empty();
 }
 
 // MARK: - Listing
 
-bool DirectoryStreamer::onListingChunk(const uint8_t* buffer, uint32_t length) {
+bool DirectoryLister::decodeEntries(Node* parent, const uint8_t* buffer, uint32_t length) {
     if (stopping_) return true;
-    return forEachDirEntry(ctx_, buffer, length, [this](const smb2_fileidfulldirectoryinformation& info, const std::string& name) {
-        Pending entry{path_util::makeFileInfo(statFromDirEntry(info), name, path_util::buildUrl(path_, name)), 0};
-        const uint64_t seq = emitted_ + pending_.size();
-        if (entry.info.isDirectory) {
-            lookups_.push_back({LookupKind::ChildCount, seq});
-            ++entry.outstanding;
+
+    const int level = parent ? parent->level + 1 : 0;
+    const std::string& basePath = parent ? parent->info.path : path_;
+    std::vector<Lookup> discovered;
+
+    const bool ok = forEachDirEntry(ctx_, buffer, length, [&](const smb2_fileidfulldirectoryinformation& info, const std::string& name) {
+        auto node = std::make_unique<Node>();
+        node->info = path_util::makeFileInfo(statFromDirEntry(info), name, path_util::buildUrl(basePath, name));
+        node->parent = parent;
+        node->level = level;
+        if (node->info.isDirectory) {
+            node->expanded = options_.maxDepth < 0 || level < options_.maxDepth;
+            discovered.push_back({node->expanded ? LookupKind::Expand : LookupKind::ChildCount, node.get()});
+            ++node->outstanding;
             ++stats_.directories;
         }
         if (options_.includeSecurityDescriptor) {
-            lookups_.push_back({LookupKind::SecurityDescriptor, seq});
-            ++entry.outstanding;
+            discovered.push_back({LookupKind::SecurityDescriptor, node.get()});
+            ++node->outstanding;
         }
-        pending_.push_back(std::move(entry));
         ++stats_.entries;
+
+        if (!parent) {
+            roots_.push_back(std::move(node));
+            return;
+        }
+        if (node->outstanding > 0) ++parent->outstanding;
+        parent->children.push_back(std::move(node));
     });
+
+    // Subtree lookups run first so earlier subtrees complete (and emit) sooner.
+    lookups_.insert(parent ? lookups_.begin() : lookups_.end(), discovered.begin(), discovered.end());
+    return ok;
 }
 
-void DirectoryStreamer::onListingDone(uint32_t status) {
+void DirectoryLister::onListingDone(uint32_t status) {
     if (status == SMB2_STATUS_SUCCESS) {
         listingComplete_ = true;
+        ++stats_.listedDirectories;
         return;
     }
     if (stopping_) return;
@@ -175,122 +194,141 @@ void DirectoryStreamer::onListingDone(uint32_t status) {
 
 // MARK: - Lookups
 
-void DirectoryStreamer::launchLookups() {
-    while (!lookups_.empty() && countOps_.size() + securityOps_.size() < options_.maxConcurrentLookups && !stopping_) {
+void DirectoryLister::launchLookups() {
+    while (!lookups_.empty() && !stopping_ && dirOps_.size() + securityOps_.size() < options_.maxConcurrentLookups) {
         const Lookup lookup = lookups_.front();
         lookups_.pop_front();
-        if (lookup.kind == LookupKind::ChildCount)
-            startChildCount(lookup.seq);
+        if (lookup.kind == LookupKind::SecurityDescriptor)
+            startSecurityDescriptor(lookup.node);
         else
-            startSecurityDescriptor(lookup.seq);
+            startDirOp(lookup);
     }
 }
 
-void DirectoryStreamer::startChildCount(uint64_t seq) {
-    Pending* entry = entryAt(seq);
-    if (!entry) return;
+void DirectoryLister::startDirOp(const Lookup& lookup) {
+    auto op = std::make_unique<DirOp>();
+    DirOp* raw = op.get();
+    raw->kind = lookup.kind;
+    raw->node = lookup.node;
 
-    auto op = std::make_unique<ChildCountOp>();
-    ChildCountOp* raw = op.get();
-    raw->seq = seq;
-    raw->query = std::make_unique<DirQuery>(
-        ctx_, path_util::normalized(entry->info.path),
-        [raw](const uint8_t* buffer, uint32_t length) {
+    DirQuery::ChunkHandler onChunk;
+    if (lookup.kind == LookupKind::Expand) {
+        onChunk = [this, raw](const uint8_t* buffer, uint32_t length) { return decodeEntries(raw->node, buffer, length); };
+    } else {
+        onChunk = [raw](const uint8_t* buffer, uint32_t length) {
             const int64_t count = countDirEntries(buffer, length);
             if (count < 0) return false;
             raw->count += count;
             return true;
-        },
-        [this, raw](uint32_t status) { onChildCountDone(*raw, status); });
+        };
+    }
+    raw->query = std::make_unique<DirQuery>(ctx_, path_util::normalized(lookup.node->info.path), std::move(onChunk),
+                                            [this, raw](uint32_t status) { onDirOpDone(*raw, status); });
 
     if (!raw->query->start()) {
-        fail(SmbErrorCode::Io, "List Directory Failed: could not queue child count for '" + entry->info.path + "'");
+        fail(SmbErrorCode::Io, "List Directory Failed: could not queue directory query for '" + lookup.node->info.path + "'");
         return;
     }
-    countOps_.push_back(std::move(op));
+    dirOps_.push_back(std::move(op));
 }
 
-void DirectoryStreamer::onChildCountDone(ChildCountOp& op, uint32_t status) {
-    Pending* entry = entryAt(op.seq);
-    if (!entry || stopping_) return;
+void DirectoryLister::onDirOpDone(DirOp& op, uint32_t status) {
+    if (stopping_) return;
+    Node* node = op.node;
 
-    if (status == SMB2_STATUS_SUCCESS) {
-        entry->info.childCount = op.count;
+    if (op.kind == LookupKind::Expand) {
+        // Same as a nested listing before: any descendant failure fails the listing.
+        if (status != SMB2_STATUS_SUCCESS) {
+            const std::string message =
+                "List Directory Failed: Could not open directory '" + node->info.path + "'. Error: " + statusText(status);
+            fail(codeForStatus(status, message), message);
+            return;
+        }
+        ++stats_.listedDirectories;
+    } else if (status == SMB2_STATUS_SUCCESS) {
+        node->info.childCount = op.count;
     } else {
-        // Same policy as the synchronous scan: only transport failures abort the listing.
+        // Only transport failures abort the listing; otherwise the count is unknown.
         const std::string message =
-            "List Directory Failed: Could not count child directory '" + entry->info.path + "'. Error: " + statusText(status);
+            "List Directory Failed: Could not count child directory '" + node->info.path + "'. Error: " + statusText(status);
         const SmbErrorCode code = codeForStatus(status, message);
         if (code == SmbErrorCode::NotConnected || code == SmbErrorCode::TimedOut) {
             fail(code, message);
             return;
         }
-        entry->info.childCount = -1;
+        node->info.childCount = -1;
     }
-    completeLookup(op.seq);
+    release(node);
 }
 
-void DirectoryStreamer::startSecurityDescriptor(uint64_t seq) {
-    Pending* entry = entryAt(seq);
-    if (!entry) return;
-
+void DirectoryLister::startSecurityDescriptor(Node* node) {
     auto op = std::make_unique<SecurityOp>();
     SecurityOp* raw = op.get();
-    raw->seq = seq;
+    raw->node = node;
     raw->query.onFinished = [this, raw] { onSecurityDone(*raw); };
 
-    if (queueSecurityDescriptorQuery(ctx_, path_util::normalized(entry->info.path), raw->query) != 0) {
-        fail(SmbErrorCode::Io, "List Directory Failed: could not queue security descriptor query for '" + entry->info.path + "'");
+    if (queueSecurityDescriptorQuery(ctx_, path_util::normalized(node->info.path), raw->query) != 0) {
+        fail(SmbErrorCode::Io, "List Directory Failed: could not queue security descriptor query for '" + node->info.path + "'");
         return;
     }
     securityOps_.push_back(std::move(op));
 }
 
-void DirectoryStreamer::onSecurityDone(SecurityOp& op) {
-    Pending* entry = entryAt(op.seq);
-    if (!entry || stopping_) return;
+void DirectoryLister::onSecurityDone(SecurityOp& op) {
+    if (stopping_) return;
+    Node* node = op.node;
 
     if (op.query.failed()) {
         const SmbErrorCode code = op.query.errorCode();
         if (code != SmbErrorCode::AccessDenied) {
-            fail(code, "List Directory Failed: security descriptor for '" + entry->info.path + "': " + op.query.error);
+            fail(code, "List Directory Failed: security descriptor for '" + node->info.path + "': " + op.query.error);
             return;
         }
-        entry->info.securityDescriptor.reset();
+        node->info.securityDescriptor.reset();
     } else {
-        entry->info.securityDescriptor = std::move(op.query.result);
+        node->info.securityDescriptor = std::move(op.query.result);
     }
-    completeLookup(op.seq);
+    release(node);
 }
 
-void DirectoryStreamer::completeLookup(uint64_t seq) {
-    if (Pending* entry = entryAt(seq); entry && entry->outstanding > 0) --entry->outstanding;
+// Finishes one unit of a node's work. A finished expanded node folds its
+// children into `children` (freeing their nodes) and releases its parent.
+// Callers must not touch `node` afterwards: its parent may free it.
+void DirectoryLister::release(Node* node) {
+    if (node->outstanding == 0 || --node->outstanding > 0) return;
+
+    if (node->expanded) {
+        node->info.children.reserve(node->children.size());
+        for (auto& child : node->children) node->info.children.push_back(std::move(child->info));
+        node->info.childCount = static_cast<int64_t>(node->info.children.size());
+        node->children.clear();
+    }
+    if (node->parent) release(node->parent);
 }
 
-void DirectoryStreamer::reapIdleOps() {
-    countOps_.remove_if([](const std::unique_ptr<ChildCountOp>& op) { return op->query->done() && op->query->idle(); });
+void DirectoryLister::reapIdleOps() {
+    dirOps_.remove_if([](const std::unique_ptr<DirOp>& op) { return op->query->done() && op->query->idle(); });
     securityOps_.remove_if([](const std::unique_ptr<SecurityOp>& op) { return op->query.finished; });
 }
 
 // MARK: - Emission
 
-size_t DirectoryStreamer::readyCount() {
-    while (readyCursor_ < pending_.size() && pending_[readyCursor_].outstanding == 0) ++readyCursor_;
+size_t DirectoryLister::readyCount() {
+    while (readyCursor_ < roots_.size() && roots_[readyCursor_]->outstanding == 0) ++readyCursor_;
     return readyCursor_;
 }
 
-void DirectoryStreamer::flush(Clock::time_point now) {
+void DirectoryLister::flush(Clock::time_point now) {
     const size_t ready = readyCount();
-    const bool complete = listingComplete_ && ready == pending_.size();
+    const bool complete = listingComplete_ && ready == roots_.size();
     if (!policy_.shouldFlush(ready, complete, now)) return;
 
     std::vector<SmbFileInfo> batch;
     batch.reserve(ready);
     for (size_t i = 0; i < ready; ++i) {
-        batch.push_back(std::move(pending_.front().info));
-        pending_.pop_front();
+        batch.push_back(std::move(roots_.front()->info));
+        roots_.pop_front();
     }
-    emitted_ += ready;
     readyCursor_ = 0;
 
     policy_.markFlushed(now);
@@ -301,33 +339,28 @@ void DirectoryStreamer::flush(Clock::time_point now) {
 
 // MARK: - Control
 
-void DirectoryStreamer::fail(SmbErrorCode code, std::string message) {
+void DirectoryLister::fail(SmbErrorCode code, std::string message) {
     if (!failure_ && !cancelled_) failure_ = Failure{code, std::move(message)};
     stopAll();
 }
 
-void DirectoryStreamer::stopAll() {
+void DirectoryLister::stopAll() {
     if (stopping_) return;
     stopping_ = true;
     drainDeadline_ = Clock::now() + kDrainTimeout;
     lookups_.clear();
     if (listing_) listing_->stop();
-    for (auto& op : countOps_) op->query->stop();
+    for (auto& op : dirOps_) op->query->stop();
 }
 
-void DirectoryStreamer::invalidate() {
+void DirectoryLister::invalidate() {
     stopping_ = true;
     if (!ctx_) return;
     ctx_ = nullptr;
     // Destroys the context; libsmb2 fires every pending callback with SHUTDOWN.
     manager_.invalidateContext();
-    countOps_.clear();
+    dirOps_.clear();
     securityOps_.clear();
-}
-
-DirectoryStreamer::Pending* DirectoryStreamer::entryAt(uint64_t seq) {
-    if (seq < emitted_ || seq - emitted_ >= pending_.size()) return nullptr;
-    return &pending_[static_cast<size_t>(seq - emitted_)];
 }
 
 }  // namespace react_native_smb::listing

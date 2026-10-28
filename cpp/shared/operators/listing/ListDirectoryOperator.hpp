@@ -6,10 +6,10 @@
 
 namespace react_native_smb {
 
-// maxDepth == 0: streams one directory level in batches on the interactive slot
-// (see DirectoryStreamer); the task's EntryStream holds the full result.
-// maxDepth != 0 (-1 = unlimited): fans out across Metadata pool slots via
-// listDirectoryParallel (bounded by maxConnections-1) and only publishes the final tree.
+// Lists through DirectoryLister on one pool slot: maxDepth 0 uses the
+// interactive slot, nested listings (maxDepth != 0, -1 = unlimited) a Metadata
+// slot so they never hold the UI slot. Top-level entries stream in batches; the
+// task's EntryStream holds the full result.
 class ListDirectoryOperator : public OperatorBase {
    public:
     ListDirectoryOperator(std::string path, int maxDepth, bool includeSecurityDescriptor, int batchSize)
@@ -19,13 +19,10 @@ class ListDirectoryOperator : public OperatorBase {
     void run() override;
 
    private:
-    void runRecursive();
-    void runStreaming();
-
     std::string path_;
     int maxDepth_;
     bool includeSecurityDescriptor_;
-    int batchSize_;  // <= 0 uses DirectoryStreamOptions' default
+    int batchSize_;  // <= 0 uses DirectoryListOptions' default
 };
 
 }  // namespace react_native_smb
