@@ -40,7 +40,7 @@ void DuplicateItemOperator::run() {
 
         lease.submitSync([&](smb2_context* ctx) {
             const std::string newName =
-                tree_ops::generateUniqueCopyName(ctx, parentPath, fileName, token, nextNameIndex);
+                tree_ops::generateUniqueCopyName(ctx, lease.manager(), parentPath, fileName, token, nextNameIndex);
             destPath = path_util::buildUrl(parentPath, newName);
         });
 

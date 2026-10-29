@@ -10,17 +10,17 @@
 #include "../ReactNativeSmb.hpp"  // SmbFileInfo
 #include "../core/CancellationToken.hpp"
 #include "../util/SmbException.hpp"
-#include "SmbDirScan.hpp"
 #include "SmbPathUtil.hpp"
+#include "listing/DirectoryLister.hpp"
 
 namespace react_native_smb {
 
-// Tree helpers for delete, copy, and duplicate operators.
+// Naming helper for the duplicate operator.
 namespace tree_ops {
 
 // Generate a unique "<base> copy[ N]<ext>" name not present in parentPath.
-inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& parentPath, const std::string& originalName,
-                                          const CancellationToken& cancel, int& nextIndex) {
+inline std::string generateUniqueCopyName(smb2_context* ctx, SmbConnectionManager& manager, const std::string& parentPath,
+                                          const std::string& originalName, const CancellationToken& cancel, int& nextIndex) {
     size_t lastDot = originalName.find_last_of('.');
     std::string baseName = (lastDot != std::string::npos && lastDot > 0) ? originalName.substr(0, lastDot) : originalName;
     std::string extension = (lastDot != std::string::npos && lastDot > 0) ? originalName.substr(lastDot) : "";
@@ -45,7 +45,12 @@ inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& 
         if (isClean) baseName = baseName.substr(0, copyPos);
     }
 
-    std::vector<SmbFileInfo> existingFiles = listOnCtx(ctx, parentPath, 0, cancel);
+    // Only "<base> copy…" names can collide, so let the server filter the parent.
+    // The pattern may match more (wildcards in the name); exact comparison follows.
+    listing::DirectoryListOptions options;
+    options.countChildren = false;
+    options.pattern = baseName + " copy*";
+    std::vector<SmbFileInfo> existingFiles = listing::listOnCtx(ctx, manager, parentPath, options, cancel);
     std::vector<std::string> existingNames;
     existingNames.reserve(existingFiles.size());
     for (const auto& item : existingFiles) existingNames.push_back(item.name);
