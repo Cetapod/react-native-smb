@@ -32,7 +32,7 @@ interface SmbShare { name: string; comment: string; }
 
 | Method | Returns | `result()` type | Notes |
 | ------ | ------- | --------------- | ----- |
-| `listDirectory(path, recursive?, maxDepth?, includeSecurityDescriptor?)` | `SmbTask<SmbFileInfo[]>` | `SmbFileInfo[]` | `maxDepth: -1` = unlimited; SD defaults to `false` |
+| `listDirectory(path, options?)` | `SmbListTask` | `SmbFileInfo[]` | See `ListDirectoryOptions` below |
 | `getPathInfo(path)` | `SmbTask<SmbFileInfo>` | `SmbFileInfo` | Includes SD when available |
 | `downloadFile(remote, local)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
 | `uploadFile(local, remote)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
@@ -53,14 +53,45 @@ interface SmbFileInfo {
 }
 ```
 
-Set `includeSecurityDescriptor` to `true` to issue an additional SD query for each returned item, including recursive children. If an item's SD query fails, the item remains in the result without `securityDescriptor`.
+```typescript
+interface ListDirectoryOptions {
+  maxDepth?: number;                    // nested levels as `children`: 0 = this level only (default), -1 = unlimited
+  includeSecurityDescriptor?: boolean;  // default false
+  batchSize?: number;                   // top-level entries per streamed batch; default 10
+}
+```
+
+Set `includeSecurityDescriptor` to `true` to issue an additional SD query for each returned item, including nested children. If the account is denied access to an item's SD, the item remains in the result without `securityDescriptor`; any other SD failure fails the listing.
 
 `getPathInfo` always attempts the SD query for its item. If that query fails, path metadata is still returned without `securityDescriptor`.
 
 ```typescript
-const files = await smb.listDirectory('/', false, -1, true).result();
+const files = await smb.listDirectory('/', { includeSecurityDescriptor: true }).result();
 const firstDacl = files[0]?.securityDescriptor?.dacl;
 ```
+
+### Streaming a listing
+
+`listDirectory` delivers top-level entries while the listing is still running, so large folders render before the scan finishes:
+
+```typescript
+const task = smb.listDirectory('/Media');
+const unsubscribe = task.subscribeEntries((batch) => {
+  setFiles((prev) => prev.concat(batch));
+});
+try {
+  await task.wait(); // or `await task.result()` for the complete array
+} finally {
+  unsubscribe();
+}
+```
+
+- Every streamed entry is final: directories already carry `childCount`, and `securityDescriptor` is set when requested.
+- A batch is pushed once `batchSize` entries are ready or 100 ms after the previous batch; the first batch goes out as soon as anything is ready. A batch contains every entry ready at that moment, so it can be larger than `batchSize`.
+- Subscribing late loses nothing: the first callback replays every entry emitted so far.
+- Entries arrive in server order. Sort in the UI if you need a stable order.
+- If the task fails or is cancelled, entries already received are an incomplete listing.
+- With a non-zero `maxDepth`, a top-level entry is emitted once its whole subtree is listed, carrying its complete `children`. Because entries keep server order, a large directory near the start delays every entry after it.
 
 ## Pool
 
@@ -83,10 +114,19 @@ See [Connection pool](./ARCHITECTURE.md).
 | `id` | Task identifier |
 | `progress`, `status` | Live getters after `subscribe()` |
 | `result()` | `Promise<T>` |
+| `wait()` | `Promise<void>`; settles like `result()` without reading the result value |
 | `subscribe(listener?)` | Returns unsubscribe |
 | `cancel()` | Abort |
 | `get()` | One-shot snapshot |
 | `SmbTask.settleAll(tasks)` | `Promise.allSettled` over results |
+
+### `SmbListTask`
+
+`SmbTask<SmbFileInfo[]>` returned by `listDirectory`, plus:
+
+| Member | Description |
+| ------ | ----------- |
+| `subscribeEntries(listener)` | Receive entry batches (replays earlier ones first); returns unsubscribe |
 
 ### Errors
 
@@ -111,7 +151,7 @@ See [Connection pool](./ARCHITECTURE.md).
 | 301 | `NoSpace` | Local or remote storage is full. |
 | 302 | `Io` | Other local or remote I/O failure. |
 
-Recursive listing, copy, duplicate, and delete fail on the first descendant failure; they never return a silent partial success. Security descriptors are omitted only when the account is denied descriptor access.
+Nested listing (`maxDepth != 0`), copy, duplicate, and delete fail on the first descendant failure; they never return a silent partial success. Security descriptors are omitted only when the account is denied descriptor access.
 
 ### Hooks
 

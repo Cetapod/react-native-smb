@@ -3,10 +3,12 @@
 #include <NitroModules/Promise.hpp>
 #include <thread>
 
+#include "../ReactNativeSmb.hpp"  // JSIConverter<SmbFileInfo>
 #include "../connection/SmbConnectionPool.hpp"
 #include "../operators/OperatorBase.hpp"
 #include "../util/SmbErrorMapper.hpp"
 #include "../util/SmbException.hpp"
+#include "EntryStream.hpp"
 #include "TaskSnapshotCodec.hpp"
 
 namespace react_native_smb {
@@ -17,7 +19,8 @@ using namespace margelo::nitro;
 SmbTask::SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool)
     : HybridObject("SmbTask"),
       SmbTaskCore(std::move(id), seedOp->kind()),
-      pool_(pool) {
+      pool_(pool),
+      entries_(std::make_shared<EntryStream>()) {
     ops_.push_back(std::move(seedOp));
     opProgress_.resize(1);
     loadHybridMethods();
@@ -129,6 +132,12 @@ std::string SmbTask::subscribeMap(const std::function<void(const std::unordered_
     });
 }
 
+std::string SmbTask::subscribeEntries(const EntriesListener& listener) {
+    return entries_->subscribe(listener);
+}
+
+void SmbTask::unsubscribeEntries(const std::string& id) { entries_->unsubscribe(id); }
+
 void SmbTask::loadHybridMethods() {
     HybridObject::loadHybridMethods();
     registerHybrids(this, [](Prototype& prototype) {
@@ -137,6 +146,8 @@ void SmbTask::loadHybridMethods() {
         prototype.registerHybridMethod("get", &SmbTask::get);
         prototype.registerHybridMethod("subscribe", &SmbTask::subscribeMap);
         prototype.registerHybridMethod("unsubscribe", &SmbTask::unsubscribe);
+        prototype.registerHybridMethod("subscribeEntries", &SmbTask::subscribeEntries);
+        prototype.registerHybridMethod("unsubscribeEntries", &SmbTask::unsubscribeEntries);
         prototype.registerRawHybridMethod("getResultValue", 0, &SmbTask::getResultValueRaw);
     });
 }

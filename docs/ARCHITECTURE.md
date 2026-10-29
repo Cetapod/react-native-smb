@@ -33,8 +33,8 @@ Metadata never uses slot 0. Interactive work can overflow to slots 1–3 when sl
 
 | Mode | Operators |
 | ---- | --------- |
-| `Interactive` | `getPathInfo`, shallow `listDirectory`, `moveItem`, `renameItem`, `createDirectory`, `getSecurityDescriptor`, `listShares` |
-| `Metadata` | `downloadFile`, `uploadFile`, `copyItem`, `duplicateItem`, `deleteItem`, recursive `listDirectory` |
+| `Interactive` | `getPathInfo`, `listDirectory` (`maxDepth: 0`), `moveItem`, `renameItem`, `createDirectory`, `getSecurityDescriptor`, `listShares` |
+| `Metadata` | `downloadFile`, `uploadFile`, `copyItem`, `duplicateItem`, `deleteItem`, `listDirectory` (`maxDepth != 0`) |
 
 FIFO queue per mode.
 
@@ -52,6 +52,19 @@ Slot 0 is application-level scheduling on top of what libsmb2 provides — inter
 ## Chunk pipeline
 
 Cross-task parallelism is the pool. Within a single transfer, `SmbFileIO` pipelines up to eight SMB2 READ/WRITE on the same `smb2_context` (`kMaxInFlight` in `SmbFileIO.cpp`). Same connection, same session — credit-based pipelining, separate from slot assignment.
+
+## Listing pipeline
+
+`listDirectory` runs `DirectoryLister` on one slot — Interactive for `maxDepth: 0`, Metadata for nested listings — instead of libsmb2's `smb2_opendir` (which reads the whole directory before returning):
+
+```
+[CREATE + QUERY_DIRECTORY] → QUERY_DIRECTORY … → CLOSE       decode each reply as it arrives
+   └ directory within maxDepth: same chain, decoded          expand into children
+   └ directory at the limit:    same chain, counted          childCount
+   └ per entry (opt-in):        CREATE + QUERY_INFO + CLOSE  security descriptor
+```
+
+Lookups share one connection: up to 16 directory queries (expansions and counts) and, separately, up to 32 security-descriptor queries in flight. Lookups start in top-level order — everything under an earlier top-level entry before anything under a later one — and directory queries go on the wire before security descriptors. An entry is ready once its lookups finish — for an expanded directory, also all of its children, whose count becomes `childCount` without another query, so each directory is opened once. Ready top-level entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result.
 
 ## Diagnostics
 

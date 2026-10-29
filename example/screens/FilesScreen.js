@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { FlatList, RefreshControl, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useMultiSelect } from '../hooks/useMultiSelect';
@@ -10,7 +11,7 @@ import SortMenuModal from './files/SortMenuModal';
 import { filesStyles as styles } from './files/styles';
 import { filterFiles, sortFiles } from './files/grouping';
 
-const FilesScreen = ({ navigation, files, currentPath, selectedShare, username, onLoadFiles, onFileAction, onFolderInfo, onCreateFolder, onUploadFile, onRefresh, onBack, onLogout, isLoading, showAlert, showPrompt, onBulkDownload, onBulkDuplicate, onBulkDelete, onBulkMove, sortBy, sortOrder, showHidden, onChangeSort, onToggleHidden }) => {
+const FilesScreen = ({ navigation, files, currentPath, selectedShare, username, onLoadFiles, onFileAction, onFolderInfo, onCreateFolder, onUploadFile, onRefresh, onBack, onLogout, isListing, showAlert, showPrompt, onBulkDownload, onBulkDuplicate, onBulkDelete, onBulkMove, sortBy, sortOrder, showHidden, onChangeSort, onToggleHidden }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showFolderMenuModal, setShowFolderMenuModal] = useState(false);
@@ -22,14 +23,40 @@ const FilesScreen = ({ navigation, files, currentPath, selectedShare, username, 
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const multi = useMultiSelect();
+  const isFocused = useIsFocused();
+  const listRef = useRef(null);
+  const scrollOffsetRef = useRef(0);
+  const wasListingRef = useRef(isListing);
 
-  // Stable key per file (currentPath + name). Used both for selection set
-  // membership AND FlatList/SectionList keyExtractor so React can reuse rows
-  // across re-renders instead of remounting them on every progress tick.
+  useLayoutEffect(() => {
+    scrollOffsetRef.current = 0;
+  }, [currentPath]);
+
+  useLayoutEffect(() => {
+    const listingJustEnded = wasListingRef.current && !isListing;
+    wasListingRef.current = isListing;
+    if (!listingJustEnded) return;
+    const y = scrollOffsetRef.current;
+    if (y <= 0) return;
+    const list = listRef.current;
+    if (list?.scrollToOffset) {
+      list.scrollToOffset({ offset: y, animated: false });
+    } else {
+      list?.getScrollResponder?.()?.scrollTo?.({ y, animated: false });
+    }
+  }, [isListing]);
+
+  const onListScroll = useCallback((event) => {
+    scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+  }, []);
+
   const fileKey = useCallback((item) => `${currentPath}|${item.name}`, [currentPath]);
   const selectionCount = multi.selected.size;
 
-  const visibleFiles = useCallback(() => filterFiles(files, searchQuery).filter((f) => showHidden || !(f?.name || '').startsWith('.')), [files, searchQuery, showHidden]);
+  const visibleFiles = useCallback(
+    () => filterFiles(files, searchQuery).filter((f) => showHidden || !(f?.name || '').startsWith('.')),
+    [files, searchQuery, showHidden],
+  );
 
   const handleSelectAll = () => {
     const keys = visibleFiles().map(fileKey);
@@ -145,22 +172,20 @@ const FilesScreen = ({ navigation, files, currentPath, selectedShare, username, 
     );
   };
 
-  const renderListBody = () => {
-    if (files.length === 0) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>{isLoading ? 'Loading...' : 'Folder is Empty'}</Text>
-          <Text style={styles.emptySubtitle}>{isLoading ? 'Please wait' : 'No files or folders in this location'}</Text>
-        </View>
-      );
-    }
+  const renderEmptyList = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyTitle}>{isListing ? 'Loading...' : 'Folder is Empty'}</Text>
+      <Text style={styles.emptySubtitle}>{isListing ? 'Please wait' : 'No files or folders in this location'}</Text>
+    </View>
+  );
 
+  const renderListBody = () => {
     const filteredFiles = filterFiles(files, searchQuery).filter((f) => showHidden || !(f?.name || '').startsWith('.'));
     const sorted = sortFiles(filteredFiles, sortBy, sortOrder);
 
     const refreshControl = (
       <RefreshControl
-        refreshing={refreshing || isLoading}
+        refreshing={refreshing}
         onRefresh={handleRefresh}
         tintColor="#4A90E2"
         colors={['#4A90E2']}
@@ -169,40 +194,54 @@ const FilesScreen = ({ navigation, files, currentPath, selectedShare, username, 
       />
     );
 
+    const listProps = {
+      ref: listRef,
+      onScroll: onListScroll,
+      scrollEventThrottle: 16,
+      ListEmptyComponent: renderEmptyList,
+      extraData: `${files.length}:${selectionCount}:${multi.selectionMode}:${[...collapsedSections].join(',')}`,
+      removeClippedSubviews: false,
+    };
+
     if (sorted.isGrouped) {
       const sectionsWithFilteredData = sorted.sections.map((section) => ({
         ...section,
-        data: collapsedSections.has(section.title) ? [] : section.data,
+        key: section.title,
+        data: !isListing && collapsedSections.has(section.title) ? [] : section.data,
       }));
 
       return (
         <SectionList
+          key={currentPath}
           sections={sectionsWithFilteredData}
           renderItem={renderFileItem}
           renderSectionHeader={renderSectionHeader}
-          keyExtractor={(item) => fileKey(item)}
+          keyExtractor={fileKey}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContainer}
-          stickySectionHeadersEnabled={true}
+          stickySectionHeadersEnabled
           refreshControl={refreshControl}
-          removeClippedSubviews={true}
           initialNumToRender={20}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={50}
           windowSize={11}
+          {...listProps}
         />
       );
     }
 
     return (
       <FlatList
+        key={currentPath}
         data={sorted.data}
         renderItem={renderFileItem}
-        keyExtractor={(item) => fileKey(item)}
+        keyExtractor={fileKey}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContainer}
         refreshControl={refreshControl}
-        removeClippedSubviews={true}
         initialNumToRender={20}
         windowSize={11}
+        {...listProps}
       />
     );
   };
@@ -298,7 +337,7 @@ const FilesScreen = ({ navigation, files, currentPath, selectedShare, username, 
         </View>
       )}
 
-      <View style={styles.content}>{renderListBody()}</View>
+      <View style={styles.content}>{isFocused ? renderListBody() : null}</View>
 
       {multi.selectionMode ? (
         <View style={bulkStyles.bar}>
@@ -364,9 +403,9 @@ const FilesScreen = ({ navigation, files, currentPath, selectedShare, username, 
       {/* FAB */}
       {!multi.selectionMode && (
         <TouchableOpacity
-          style={[styles.fab, isLoading && styles.fabDisabled]}
+          style={[styles.fab, isListing && styles.fabDisabled]}
           onPress={() => setShowFabMenuModal(true)}
-          disabled={isLoading}
+          disabled={isListing}
           activeOpacity={0.8}>
           <Text style={styles.fabIcon}>+</Text>
         </TouchableOpacity>

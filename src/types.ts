@@ -59,6 +59,15 @@ export interface SmbFileInfo {
   readonly securityDescriptor?: SmbSecurityDescriptor;
 }
 
+export interface ListDirectoryOptions {
+  /** Nested levels to include as `children`: 0 = this level only (default), -1 = unlimited. */
+  readonly maxDepth?: number;
+  /** Fetch each item's security descriptor (default `false`). */
+  readonly includeSecurityDescriptor?: boolean;
+  /** Top-level entries per streamed batch (default 10). */
+  readonly batchSize?: number;
+}
+
 export interface SmbAce {
   readonly aceType: string;
   readonly aceFlags: string[];
@@ -161,4 +170,10 @@ export interface NativeSmbTask {
   subscribe(listener: (snapshot: Record<string, string>) => void): string;
   unsubscribe(subscriptionId: string): void;
   getResultValue(): unknown;
+}
+
+export interface NativeSmbListTask extends NativeSmbTask {
+  /** Replays entries emitted so far as one batch, then delivers each live batch. */
+  subscribeEntries(listener: (entries: SmbFileInfo[]) => void): string;
+  unsubscribeEntries(subscriptionId: string): void;
 }

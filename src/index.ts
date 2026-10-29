@@ -3,6 +3,7 @@ export * from './utils';
 
 export { SMB, type Smb } from './core/SMB';
 export { SmbTask } from './core/SmbTask';
+export { SmbListTask } from './core/SmbListTask';
 export { useSubscribe, type SubscribeHandle } from './hooks/useSubscribe';
 export { useTransfers, useTransferActions } from './hooks/useTransfers';
 

@@ -18,7 +18,7 @@ void GetPathInfoOperator::run() {
     const CancellationToken token = cancelToken();
     bool found = false;
     SmbFileInfo info;
-    std::vector<SmbFileInfo> siblings = handle.submitSync([&](smb2_context* ctx) { return listOnCtx(ctx, parentPath, true, 1, token); });
+    std::vector<SmbFileInfo> siblings = handle.submitSync([&](smb2_context* ctx) { return listOnCtx(ctx, parentPath, 1, token); });
     for (const auto& item : siblings) {
         if (item.name == fileName) {
             info = item;

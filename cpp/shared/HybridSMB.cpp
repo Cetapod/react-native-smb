@@ -189,8 +189,8 @@ std::shared_ptr<SmbTask> HybridSMB::connectShare(const std::string& taskId, cons
 
 // --- Listing & Info ---
 
-std::shared_ptr<SmbTask> HybridSMB::listDirectory(const std::string& taskId, const std::string& path, bool recursive, int maxDepth, bool includeSecurityDescriptor) {
-    return createTask<ListDirectoryOperator>(taskId, std::make_unique<ListDirectoryOperator>(path, recursive, maxDepth, includeSecurityDescriptor));
+std::shared_ptr<SmbTask> HybridSMB::listDirectory(const std::string& taskId, const std::string& path, int maxDepth, bool includeSecurityDescriptor, int batchSize) {
+    return createTask<ListDirectoryOperator>(taskId, std::make_unique<ListDirectoryOperator>(path, maxDepth, includeSecurityDescriptor, batchSize));
 }
 
 std::shared_ptr<SmbTask> HybridSMB::getPathInfo(const std::string& taskId, const std::string& path) {

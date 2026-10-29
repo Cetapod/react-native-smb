@@ -2,6 +2,7 @@ import { NitroModules } from 'react-native-nitro-modules';
 import { shapePoolInfo } from '../bridge/decode';
 import type { ReactNativeSmb } from '../ReactNativeSmb';
 import type {
+  ListDirectoryOptions,
   NativeSmbTask,
   PoolInfo,
   SmbConnectionInfo,
@@ -11,8 +12,11 @@ import type {
   SmbShare,
 } from '../types';
 import { generateTaskId } from './ids';
+import { SmbListTask } from './SmbListTask';
 import { SmbTask } from './SmbTask';
 import { TransferStore } from './TransferStore';
+
+const DEFAULT_LIST_BATCH_SIZE = 10;
 
 export class SmbClient {
   private readonly native: ReactNativeSmb;
@@ -73,8 +77,16 @@ export class SmbClient {
     return this.op((id) => this.native.listShares(id));
   }
 
-  listDirectory(path: string, recursive = false, maxDepth = -1, includeSecurityDescriptor = false): SmbTask<SmbFileInfo[]> {
-    return this.op((id) => this.native.listDirectory(id, path, recursive, maxDepth, includeSecurityDescriptor));
+  /**
+   * List a directory. Top-level entries also stream via
+   * {@link SmbListTask.subscribeEntries}: a batch is pushed once `batchSize`
+   * entries are ready or 100 ms have passed (the first batch goes out immediately).
+   * With a non-zero `maxDepth`, each streamed entry carries its complete subtree.
+   */
+  listDirectory(path: string, options: ListDirectoryOptions = {}): SmbListTask {
+    const { maxDepth = 0, includeSecurityDescriptor = false, batchSize = DEFAULT_LIST_BATCH_SIZE } = options;
+    const id = generateTaskId();
+    return new SmbListTask(id, this.native.listDirectory(id, path, maxDepth, includeSecurityDescriptor, batchSize));
   }
 
   getPathInfo(path: string): SmbTask<SmbFileInfo> {

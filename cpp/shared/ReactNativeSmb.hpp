@@ -67,7 +67,7 @@ struct SmbFileInfo {
     int64_t createdAt;                  // Creation time (smb2_btime)
     int64_t changedAt;                  // Attribute change time (smb2_ctime)
     int64_t childCount;                 // Directories: number of immediate children; -1 if unknown / not a directory
-    std::vector<SmbFileInfo> children;  // Nested children for directories (when recursive)
+    std::vector<SmbFileInfo> children;  // Nested children for directories (when maxDepth != 0)
     std::optional<SmbSecurityDescriptor> securityDescriptor;
 };
 
@@ -86,7 +86,7 @@ class ReactNativeSmb : public virtual HybridObject {
     virtual std::shared_ptr<SmbTask> listShares(const std::string& taskId) = 0;
 
     // --- Listing & Info ---
-    virtual std::shared_ptr<SmbTask> listDirectory(const std::string& taskId, const std::string& path, bool recursive, int maxDepth, bool includeSecurityDescriptor) = 0;
+    virtual std::shared_ptr<SmbTask> listDirectory(const std::string& taskId, const std::string& path, int maxDepth, bool includeSecurityDescriptor, int batchSize) = 0;
     virtual std::shared_ptr<SmbTask> getPathInfo(const std::string& taskId, const std::string& path) = 0;
     virtual std::shared_ptr<SmbTask> getSecurityDescriptor(const std::string& taskId, const std::string& path) = 0;
 

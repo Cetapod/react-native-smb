@@ -8,9 +8,12 @@ function errorForSnapshot(snapshot: SmbTaskState, taskId: string): SmbTaskError 
   return new SmbTaskError(message, snapshot.errorCode as SmbError, taskId);
 }
 
-/** Subscribe once, resolve or reject when the task reaches a terminal status. */
-export function taskResult<T>(task: SmbTask<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+/**
+ * Subscribe once; on Success resolve with `onSuccess()`, otherwise reject with
+ * the task error when the task reaches a terminal status.
+ */
+function settleTask<T, R>(task: SmbTask<T>, onSuccess: () => R): Promise<R> {
+  return new Promise<R>((resolve, reject) => {
     let settled = false;
     let unsubscribe = () => {};
 
@@ -25,7 +28,7 @@ export function taskResult<T>(task: SmbTask<T>): Promise<T> {
       settled = true;
       try {
         if (snapshot.status === TaskStatus.Success) {
-          resolve(task.getResultValue());
+          resolve(onSuccess());
         } else {
           reject(errorForSnapshot(snapshot, task.id));
         }
@@ -53,4 +56,14 @@ export function taskResult<T>(task: SmbTask<T>): Promise<T> {
       reject(e);
     }
   });
+}
+
+/** Resolve with the typed result, or reject when the task fails or is cancelled. */
+export function taskResult<T>(task: SmbTask<T>): Promise<T> {
+  return settleTask(task, () => task.getResultValue());
+}
+
+/** Like {@link taskResult} without reading (converting) the result value. */
+export function taskDone<T>(task: SmbTask<T>): Promise<void> {
+  return settleTask(task, () => undefined);
 }

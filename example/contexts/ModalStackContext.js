@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 
 const ModalStackContext = createContext(null);
 
@@ -8,6 +8,7 @@ export const ModalStackProvider = ({ children }) => {
   const [showFileOperationModal, setShowFileOperationModal] = useState(false);
   const [showFolderPickerModal, setShowFolderPickerModal] = useState(false);
   const [fileOperationType, setFileOperationType] = useState('');
+  const bulkMovePayloadRef = useRef(null);
 
   const openFileAction = useCallback((file) => {
     setSelectedFile(file);
@@ -38,6 +39,17 @@ export const ModalStackProvider = ({ children }) => {
     setSelectedFile(null);
   }, []);
 
+  const openFolderPickerForBulkMove = useCallback((items, onDone) => {
+    bulkMovePayloadRef.current = { items, onDone };
+    setShowFolderPickerModal(true);
+  }, []);
+
+  const takeBulkMovePayload = useCallback(() => {
+    const payload = bulkMovePayloadRef.current;
+    bulkMovePayloadRef.current = null;
+    return payload;
+  }, []);
+
   const value = useMemo(
     () => ({
       selectedFile,
@@ -52,8 +64,10 @@ export const ModalStackProvider = ({ children }) => {
       closeFileOperation,
       openFolderPicker,
       closeFolderPicker,
+      openFolderPickerForBulkMove,
+      takeBulkMovePayload,
     }),
-    [selectedFile, showFileActionModal, showFileOperationModal, showFolderPickerModal, fileOperationType, openFileAction, closeFileAction, openFileOperation, closeFileOperation, openFolderPicker, closeFolderPicker],
+    [selectedFile, showFileActionModal, showFileOperationModal, showFolderPickerModal, fileOperationType, openFileAction, closeFileAction, openFileOperation, closeFileOperation, openFolderPicker, closeFolderPicker, openFolderPickerForBulkMove, takeBulkMovePayload],
   );
 
   return <ModalStackContext.Provider value={value}>{children}</ModalStackContext.Provider>;

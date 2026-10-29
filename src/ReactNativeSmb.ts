@@ -1,5 +1,5 @@
 import type { HybridObject } from 'react-native-nitro-modules';
-import type { SmbCredentials, NativeSmbTask } from './types';
+import type { SmbCredentials, NativeSmbListTask, NativeSmbTask } from './types';
 
 /**
  * A Nitro module that provides SMB client functionality using libsmb2
@@ -81,25 +81,27 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
 
   /**
    * Lists contents of a directory
-   * @param path Directory path (use "/" for root)
-   * @param recursive Whether to list recursively (default: false)
-   * @param maxDepth Maximum recursion depth (-1 = unlimited, 0 = current only)
-   * @param includeSecurityDescriptor Whether to fetch each item's security descriptor
    * @param taskId Unique ID for the task
-   * @param onStatusChange Callback for status updates
-   * @param onProgress Callback for progress updates
-   * @returns SmbTask resolving to array of file/directory info
+   * @param path Directory path (use "/" for root)
+   * @param maxDepth Nested levels to include as children (0 = this level only, -1 = unlimited)
+   * @param includeSecurityDescriptor Whether to fetch each item's security descriptor
+   * @param batchSize Top-level entries per streamed batch (batches also flush every 100 ms)
+   * @returns SmbTask resolving to array of file/directory info; top-level entries also stream
    */
-  listDirectory(taskId: string, path: string, recursive: boolean, maxDepth: number, includeSecurityDescriptor: boolean): NativeSmbTask;
+  listDirectory(
+    taskId: string,
+    path: string,
+    maxDepth: number,
+    includeSecurityDescriptor: boolean,
+    batchSize: number,
+  ): NativeSmbListTask;
 
 
   /**
    * Gets detailed information about a path (file or directory).
    * Generic version that handles both file/directory types.
-   * @param path Path to the item
    * @param taskId Unique ID for the task
-   * @param onStatusChange Callback for status updates
-   * @param onProgress Callback for progress updates
+   * @param path Path to the item
    * @returns SmbTask resolving to file information with a security descriptor when available
    */
   getPathInfo(taskId: string, path: string): NativeSmbTask;
@@ -107,8 +109,8 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
 
   /**
    * Retrieves security descriptor for a file/directory
-   * @param path Path to the item
    * @param taskId Unique ID for the task
+   * @param path Path to the item
    * @returns SmbTask resolving to security descriptor
    *
    * @example
@@ -128,8 +130,7 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
    * Uploads a file from local storage to the SMB server
    * @param localPath Local path to the file
    * @param remotePath Destination path on the server
-   * @param progressHandler Optional callback to track upload progress
-   * @returns SmbTask that resolves when upload completes
+   * @returns SmbTask that resolves when upload completes; subscribe for progress
    */
   uploadFile(taskId: string, localPath: string, remotePath: string): NativeSmbTask;
 
@@ -173,12 +174,11 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
 
   /**
    * Copies a file or directory on the SMB server
+   * @param taskId Unique ID for the task
    * @param fromPath Source path
    * @param toPath Destination path
    * @param recursive Whether to copy recursively
-   * @param taskId Unique ID for the task
-   * @param onStatusChange Callback for status updates
-   * @param onProgress Callback for progress updates
+   * @returns SmbTask that resolves when the copy completes; subscribe for progress
    */
   copyItem(taskId: string, fromPath: string, toPath: string, recursive: boolean): NativeSmbTask;
 
