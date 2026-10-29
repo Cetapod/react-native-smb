@@ -98,11 +98,11 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
 
 
   /**
-   * Gets detailed information about a path (file or directory).
-   * Generic version that handles both file/directory types.
+   * Gets information about a path (file or directory) from the item itself.
    * @param taskId Unique ID for the task
-   * @param path Path to the item
-   * @returns SmbTask resolving to file information with a security descriptor when available
+   * @param path Path to the item ("/" is the share root)
+   * @returns SmbTask resolving to file information with a security descriptor when available;
+   *   folders include `childCount` but not `children`
    */
   getPathInfo(taskId: string, path: string): NativeSmbTask;
 

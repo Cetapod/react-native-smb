@@ -33,7 +33,7 @@ interface SmbShare { name: string; comment: string; }
 | Method | Returns | `result()` type | Notes |
 | ------ | ------- | --------------- | ----- |
 | `listDirectory(path, options?)` | `SmbListTask` | `SmbFileInfo[]` | See `ListDirectoryOptions` below |
-| `getPathInfo(path)` | `SmbTask<SmbFileInfo>` | `SmbFileInfo` | Includes SD when available |
+| `getPathInfo(path)` | `SmbTask<SmbFileInfo>` | `SmbFileInfo` | Item itself plus SD; folders get `childCount`, no `children` |
 | `downloadFile(remote, local)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
 | `uploadFile(local, remote)` | `SmbTask<void>` | `void` | `subscribe()` for progress |
 | `createDirectory(path)` | `SmbTask<void>` | `void` | Creates parents |
@@ -63,7 +63,7 @@ interface ListDirectoryOptions {
 
 Set `includeSecurityDescriptor` to `true` to issue an additional SD query for each returned item, including nested children. If the account is denied access to an item's SD, the item remains in the result without `securityDescriptor`; any other SD failure fails the listing.
 
-`getPathInfo` always attempts the SD query for its item. If that query fails, path metadata is still returned without `securityDescriptor`.
+`getPathInfo` reads the item itself (links resolve to their target; `/` is the share root) together with its SD. Folders also get `childCount`, but never `children`; use `listDirectory` for contents. If the account is denied access to the SD, path metadata is still returned without `securityDescriptor`; any other SD failure fails the task.
 
 ```typescript
 const files = await smb.listDirectory('/', { includeSecurityDescriptor: true }).result();
