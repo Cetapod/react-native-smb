@@ -12,17 +12,17 @@ namespace react_native_smb::listing {
 namespace {
 constexpr uint32_t kOutputBufferLength = 0xffff;
 
-void fillQueryRequest(smb2_query_directory_request& req, const smb2_file_id fileId) {
+void fillQueryRequest(smb2_query_directory_request& req, const smb2_file_id fileId, const std::string& pattern) {
     std::memset(&req, 0, sizeof(req));
     req.file_information_class = SMB2_FILE_ID_FULL_DIRECTORY_INFORMATION;
     std::memcpy(req.file_id, fileId, SMB2_FD_SIZE);
     req.output_buffer_length = kOutputBufferLength;
-    req.name = "*";
+    req.name = pattern.c_str();
 }
 }  // namespace
 
-DirQuery::DirQuery(smb2_context* ctx, std::string path, ChunkHandler onChunk, DoneHandler onDone)
-    : ctx_(ctx), path_(std::move(path)), onChunk_(std::move(onChunk)), onDone_(std::move(onDone)) {}
+DirQuery::DirQuery(smb2_context* ctx, std::string path, ChunkHandler onChunk, DoneHandler onDone, std::string pattern)
+    : ctx_(ctx), path_(std::move(path)), onChunk_(std::move(onChunk)), onDone_(std::move(onDone)), pattern_(std::move(pattern)) {}
 
 bool DirQuery::start() {
     smb2_create_request create;
@@ -43,7 +43,7 @@ bool DirQuery::start() {
     smb2_file_id related;
     std::memset(related, 0xFF, SMB2_FD_SIZE);
     smb2_query_directory_request query;
-    fillQueryRequest(query, related);
+    fillQueryRequest(query, related, pattern_);
     smb2_pdu* next = smb2_cmd_query_directory_async(ctx_, &query, &DirQuery::onQuery, this);
     if (!next) {
         smb2_free_pdu(ctx_, pdu);
@@ -126,7 +126,7 @@ void DirQuery::handleQueryReply(uint32_t status, void* commandData) {
 
 bool DirQuery::queueQuery() {
     smb2_query_directory_request query;
-    fillQueryRequest(query, fileId_);
+    fillQueryRequest(query, fileId_, pattern_);
     smb2_pdu* pdu = smb2_cmd_query_directory_async(ctx_, &query, &DirQuery::onQuery, this);
     if (!pdu) return false;
     smb2_queue_pdu(ctx_, pdu);

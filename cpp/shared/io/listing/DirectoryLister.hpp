@@ -30,6 +30,10 @@ namespace listing {
 struct DirectoryListOptions {
     // Nested levels to expand into `children`: 0 = this level only, -1 = unlimited.
     int maxDepth{0};
+    // Count directories at the depth limit; when false their childCount stays -1.
+    bool countChildren{true};
+    // Server-side name filter for the top-level directory (wildcards allowed).
+    std::string pattern{"*"};
     size_t minBatch{10};
     std::chrono::milliseconds maxDelay{100};
     // Directory expansions and child counts in flight on the connection. They
