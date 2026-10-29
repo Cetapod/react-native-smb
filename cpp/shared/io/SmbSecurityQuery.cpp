@@ -1,7 +1,5 @@
 #include "SmbSecurityQuery.hpp"
 
-#include <poll.h>
-
 #include <cstddef>
 #include <cerrno>
 #include <cstdint>
@@ -18,6 +16,7 @@
 #include "SmbSecurity.hpp"
 #include "../connection/SmbConnection.hpp"
 #include "../util/SmbException.hpp"
+#include "SmbServiceLoop.hpp"
 
 namespace react_native_smb {
 
@@ -27,37 +26,6 @@ void finishQuery(SecurityDescriptorQuery& query) {
     if (query.finished) return;
     query.finished = true;
     if (query.onFinished) query.onFinished();
-}
-
-void pollUntilComplete(smb2_context* ctx, SecurityDescriptorQuery& context) {
-    struct pollfd pfd;
-    int timeoutCount = 0;
-    constexpr int kMaxTimeouts = 10;
-
-    while (!context.finished) {
-        pfd.fd = smb2_get_fd(ctx);
-        if (pfd.fd < 0) SmbException::raise(SmbErrorCode::NotConnected, "ACL Error: invalid file descriptor from libsmb2");
-        pfd.events = smb2_which_events(ctx);
-        pfd.revents = 0;
-
-        if (poll(&pfd, 1, 1000) < 0) {
-            if (errno == EINTR) continue;
-            SmbException::raiseFromErrno(errno, "ACL Error: poll failed");
-        }
-
-        if (pfd.revents == 0) {
-            if (++timeoutCount >= kMaxTimeouts) SmbException::raise(SmbErrorCode::TimedOut, "ACL query timed out");
-            continue;
-        }
-        timeoutCount = 0;
-
-        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            SmbException::raise(SmbErrorCode::NotConnected, "ACL Error: socket poll failure (revents=" + std::to_string(pfd.revents) + ")");
-        }
-        if (smb2_service(ctx, pfd.revents) < 0) {
-            SmbException::raiseFromSmb(ctx, -1, "ACL Error: smb2_service failed: " + std::string(smb2_get_error(ctx)), SmbErrorCode::NotConnected);
-        }
-    }
 }
 
 }  // namespace
@@ -180,7 +148,7 @@ SmbSecurityDescriptor querySecurityDescriptorOnCtx(smb2_context* ctx, const std:
         SmbException::raiseFromSmb(ctx, -1, "ACL Operation Failed: Could not send ACL query for '" + path + "'. Error: " + std::string(smb2_get_error(ctx)));
     }
     try {
-        pollUntilComplete(ctx, *queryContext);
+        serviceUntil(ctx, [&] { return queryContext->finished; }, "ACL query");
     } catch (...) {
         manager.invalidateContext();
         throw;
