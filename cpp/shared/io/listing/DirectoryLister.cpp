@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <iterator>
 #include <utility>
 
 #include "../../connection/SmbConnection.hpp"
@@ -359,6 +360,18 @@ void DirectoryLister::invalidate() {
     manager_.invalidateContext();
     dirOps_.clear();
     securityOps_.clear();
+}
+
+// MARK: - Synchronous listing
+
+std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, SmbConnectionManager& manager, const std::string& path,
+                                   const DirectoryListOptions& options, const CancellationToken& cancel) {
+    std::vector<SmbFileInfo> entries;
+    DirectoryLister lister(ctx, manager, path, options, cancel, [&entries](std::vector<SmbFileInfo>&& batch) {
+        entries.insert(entries.end(), std::make_move_iterator(batch.begin()), std::make_move_iterator(batch.end()));
+    });
+    lister.run();
+    return entries;
 }
 
 }  // namespace react_native_smb::listing

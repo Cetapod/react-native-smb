@@ -161,5 +161,11 @@ class DirectoryLister {
     Clock::time_point lastActivity_;
 };
 
+// Lists on an exclusively held context without streaming and returns the
+// top-level entries (with `children` up to maxDepth). Returns what was listed
+// so far when cancelled; callers check the token. Throws SmbException on failure.
+std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, SmbConnectionManager& manager, const std::string& path,
+                                   const DirectoryListOptions& options, const CancellationToken& cancel);
+
 }  // namespace listing
 }  // namespace react_native_smb

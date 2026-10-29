@@ -18,16 +18,6 @@ namespace react_native_smb {
 // Tree helpers for delete, copy, and duplicate operators.
 namespace tree_ops {
 
-// Depth-first collect of every descendant (children appended before parent so
-// callers can rmdir deepest-first). Any descendant failure aborts the operation.
-inline void collectAllItems(smb2_context* ctx, const std::string& path, std::vector<SmbFileInfo>& allItems, const CancellationToken& cancel) {
-    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, 0, cancel);
-    for (const auto& item : contents) {
-        if (item.isDirectory) collectAllItems(ctx, item.path, allItems, cancel);
-        allItems.push_back(item);
-    }
-}
-
 // Recursively total the byte size of a path. Any descendant failure aborts the operation.
 inline int64_t calculateTotalSize(smb2_context* ctx, const std::string& path, bool recursive, const CancellationToken& cancel) {
     const std::string norm = path_util::normalized(path);
