@@ -114,6 +114,7 @@ void SmbConnectionPool::tryAssignNext() {
             params.serverUrl = serverUrl_;
             params.shareName = shareName_;
             params.credentials = credentials_;
+            params.capabilities = capabilities_;
             needsActivate = slotNeedsActivate(slot);
             taskId = req->taskId;
 
@@ -166,6 +167,7 @@ void SmbConnectionPool::tryAssignNext() {
             }
 
             slot.assign(req->id, req->taskId, req->kind);
+            slot.manager()->setCapabilities(params.capabilities);
             PoolContextHandle handle(this, slotIdx, slot.manager());
             if (!fulfillRequest(req, std::move(handle))) {
                 // The unconsumed handle releases the slot when it leaves scope.
@@ -291,6 +293,7 @@ void SmbConnectionPool::clearConfiguration() {
     serverUrl_.clear();
     shareName_.clear();
     credentials_.reset();
+    capabilities_ = std::make_shared<ServerCapabilities>();
 }
 
 void SmbConnectionPool::initialize(const std::string& url, const SmbCredentials& credentials, const std::string& taskId, const CancellationToken& cancel) {
@@ -350,6 +353,7 @@ void SmbConnectionPool::connectShare(const std::string& share, const std::string
             slots_[i].manager()->disconnect(taskId);
         }
         shareName_ = share;
+        capabilities_ = std::make_shared<ServerCapabilities>();
         lifecycle_ = PoolLifecycle::Running;
         SMB_LOG_INFO("Pool share connected");
     } catch (...) {

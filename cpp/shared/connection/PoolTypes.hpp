@@ -9,6 +9,7 @@
 namespace react_native_smb {
 
 struct SmbCredentials;
+struct ServerCapabilities;
 
 enum class AcquireMode {
     Interactive,
@@ -25,6 +26,7 @@ struct PoolConnectParams {
     std::string serverUrl;
     std::string shareName;
     std::shared_ptr<SmbCredentials> credentials;
+    std::shared_ptr<ServerCapabilities> capabilities;
 };
 
 struct PoolSlotInfo {

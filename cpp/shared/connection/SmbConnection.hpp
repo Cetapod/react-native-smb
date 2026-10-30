@@ -2,6 +2,7 @@
 
 #include "../ReactNativeSmb.hpp"
 #include "../util/SmbErrorMapper.hpp"
+#include "ServerCapabilities.hpp"
 
 #include <cstdint>
 #include <cstddef>
@@ -43,6 +44,7 @@ class SmbConnectionManager {
    private:
     std::shared_ptr<smb2_context> context_;
     std::shared_ptr<SmbCredentials> credentials_;
+    std::shared_ptr<ServerCapabilities> capabilities_{std::make_shared<ServerCapabilities>()};
     std::recursive_timed_mutex connectionMutex_;
     std::string currentUrl_;
     std::string serverName_;
@@ -77,6 +79,12 @@ class SmbConnectionManager {
     std::recursive_timed_mutex& getConnectionMutex() { return connectionMutex_; }
 
     smb2_context* rawCtx() const { return context_.get(); }
+
+    // Pool-wide knowledge about the server; set by the pool when it hands out the slot.
+    ServerCapabilities& capabilities() const { return *capabilities_; }
+    void setCapabilities(std::shared_ptr<ServerCapabilities> capabilities) {
+        if (capabilities) capabilities_ = std::move(capabilities);
+    }
 
     template <typename Fn, typename R = std::invoke_result_t<Fn, smb2_context*>>
     R submitSync(Fn&& fn) {
