@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <iterator>
 #include <utility>
 
 #include "../../connection/SmbConnection.hpp"
@@ -57,7 +58,7 @@ void DirectoryLister::run() {
     lastActivity_ = Clock::now();
     listing_ = std::make_unique<DirQuery>(
         ctx_, path_util::normalized(path_), [this](const uint8_t* buffer, uint32_t length) { return decodeEntries(nullptr, buffer, length); },
-        [this](uint32_t status) { onListingDone(status); });
+        [this](uint32_t status) { onListingDone(status); }, options_.pattern);
     if (!listing_->start()) {
         SmbException::raiseFromSmb(ctx_, -1, "List Directory Failed: Could not queue directory query for '" + path_ + "'. Error: " +
                                                  smb2_get_error(ctx_));
@@ -159,8 +160,10 @@ bool DirectoryLister::decodeEntries(Node* parent, const uint8_t* buffer, uint32_
         node->level = level;
         if (node->info.isDirectory) {
             node->expanded = options_.maxDepth < 0 || level < options_.maxDepth;
-            dirLookups_.emplace(node->topLevel, Lookup{node->expanded ? LookupKind::Expand : LookupKind::ChildCount, node.get()});
-            ++node->outstanding;
+            if (node->expanded || options_.countChildren) {
+                dirLookups_.emplace(node->topLevel, Lookup{node->expanded ? LookupKind::Expand : LookupKind::ChildCount, node.get()});
+                ++node->outstanding;
+            }
         }
         if (options_.includeSecurityDescriptor) {
             securityLookups_.emplace(node->topLevel, Lookup{LookupKind::SecurityDescriptor, node.get()});
@@ -357,6 +360,18 @@ void DirectoryLister::invalidate() {
     manager_.invalidateContext();
     dirOps_.clear();
     securityOps_.clear();
+}
+
+// MARK: - Synchronous listing
+
+std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, SmbConnectionManager& manager, const std::string& path,
+                                   const DirectoryListOptions& options, const CancellationToken& cancel) {
+    std::vector<SmbFileInfo> entries;
+    DirectoryLister lister(ctx, manager, path, options, cancel, [&entries](std::vector<SmbFileInfo>&& batch) {
+        entries.insert(entries.end(), std::make_move_iterator(batch.begin()), std::make_move_iterator(batch.end()));
+    });
+    lister.run();
+    return entries;
 }
 
 }  // namespace react_native_smb::listing

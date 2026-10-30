@@ -10,51 +10,17 @@
 #include "../ReactNativeSmb.hpp"  // SmbFileInfo
 #include "../core/CancellationToken.hpp"
 #include "../util/SmbException.hpp"
-#include "SmbDirScan.hpp"
 #include "SmbPathUtil.hpp"
+#include "listing/DirectoryLister.hpp"
 
 namespace react_native_smb {
 
-// Tree helpers for delete, copy, and duplicate operators.
+// Naming helper for the duplicate operator.
 namespace tree_ops {
 
-// Depth-first collect of every descendant (children appended before parent so
-// callers can rmdir deepest-first). Any descendant failure aborts the operation.
-inline void collectAllItems(smb2_context* ctx, const std::string& path, std::vector<SmbFileInfo>& allItems, const CancellationToken& cancel) {
-    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, 0, cancel);
-    for (const auto& item : contents) {
-        if (item.isDirectory) collectAllItems(ctx, item.path, allItems, cancel);
-        allItems.push_back(item);
-    }
-}
-
-// Recursively total the byte size of a path. Any descendant failure aborts the operation.
-inline int64_t calculateTotalSize(smb2_context* ctx, const std::string& path, bool recursive, const CancellationToken& cancel) {
-    const std::string norm = path_util::normalized(path);
-    struct smb2_stat_64 stat;
-    const int result = smb2_stat(ctx, norm.c_str(), &stat);
-    if (result < 0) {
-        SmbException::raiseFromSmb(ctx, result, "Copy Failed: Could not stat source '" + path + "'. Error: " + smb2_get_error(ctx));
-    }
-
-    const bool isDirectory = (stat.smb2_type & SMB2_TYPE_DIRECTORY) != 0;
-    if (!isDirectory) return static_cast<int64_t>(stat.smb2_size);
-    if (!recursive) return 0;
-
-    int64_t total = 0;
-    std::vector<SmbFileInfo> contents = listOnCtx(ctx, path, 0, cancel);
-    for (const auto& item : contents) {
-        if (item.isDirectory)
-            total += calculateTotalSize(ctx, item.path, true, cancel);
-        else
-            total += item.size;
-    }
-    return total;
-}
-
 // Generate a unique "<base> copy[ N]<ext>" name not present in parentPath.
-inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& parentPath, const std::string& originalName,
-                                          const CancellationToken& cancel, int& nextIndex) {
+inline std::string generateUniqueCopyName(smb2_context* ctx, SmbConnectionManager& manager, const std::string& parentPath,
+                                          const std::string& originalName, const CancellationToken& cancel, int& nextIndex) {
     size_t lastDot = originalName.find_last_of('.');
     std::string baseName = (lastDot != std::string::npos && lastDot > 0) ? originalName.substr(0, lastDot) : originalName;
     std::string extension = (lastDot != std::string::npos && lastDot > 0) ? originalName.substr(lastDot) : "";
@@ -79,7 +45,12 @@ inline std::string generateUniqueCopyName(smb2_context* ctx, const std::string& 
         if (isClean) baseName = baseName.substr(0, copyPos);
     }
 
-    std::vector<SmbFileInfo> existingFiles = listOnCtx(ctx, parentPath, 0, cancel);
+    // Only "<base> copy…" names can collide, so let the server filter the parent.
+    // The pattern may match more (wildcards in the name); exact comparison follows.
+    listing::DirectoryListOptions options;
+    options.countChildren = false;
+    options.pattern = baseName + " copy*";
+    std::vector<SmbFileInfo> existingFiles = listing::listOnCtx(ctx, manager, parentPath, options, cancel);
     std::vector<std::string> existingNames;
     existingNames.reserve(existingFiles.size());
     for (const auto& item : existingFiles) existingNames.push_back(item.name);

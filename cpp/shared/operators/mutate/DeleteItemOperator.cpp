@@ -3,15 +3,30 @@
 #include <smb2/libsmb2.h>
 #include <smb2/smb2.h>
 
-#include <algorithm>
 #include <vector>
 
 #include "../../ReactNativeSmb.hpp"
 #include "../../io/SmbPathUtil.hpp"
-#include "../../io/SmbTreeOps.hpp"
+#include "../../io/listing/DirectoryLister.hpp"
 #include "../../util/SmbException.hpp"
 
 namespace react_native_smb {
+
+namespace {
+// Flattens a listed tree; directories come after their descendants so they can
+// be removed in order.
+void collectItems(std::vector<SmbFileInfo>& nodes, std::vector<SmbFileInfo>& files, std::vector<SmbFileInfo>& dirs) {
+    for (auto& node : nodes) {
+        if (!node.isDirectory) {
+            files.push_back(std::move(node));
+            continue;
+        }
+        collectItems(node.children, files, dirs);
+        node.children.clear();
+        dirs.push_back(std::move(node));
+    }
+}
+}  // namespace
 
 void DeleteItemOperator::run() {
     const CancellationToken token = cancelToken();
@@ -42,10 +57,13 @@ void DeleteItemOperator::run() {
         return;
     }
 
-    std::vector<SmbFileInfo> allItems;
+    std::vector<SmbFileInfo> tree;
     {
+        listing::DirectoryListOptions options;
+        options.maxDepth = -1;
+        options.countChildren = false;
         auto handle = requestContext(AcquireMode::Metadata);
-        handle.submitSync([&](smb2_context* ctx) { tree_ops::collectAllItems(ctx, path_, allItems, token); });
+        tree = handle.submitSync([&](smb2_context* ctx) { return listing::listOnCtx(ctx, handle.manager(), path_, options, token); });
     }
     if (isCancelled()) {
         emitStatus(SmbTaskStatus::Cancelled);
@@ -53,13 +71,8 @@ void DeleteItemOperator::run() {
     }
 
     std::vector<SmbFileInfo> fileItems;
-    std::vector<SmbFileInfo> dirItems;
-    for (auto& item : allItems) {
-        if (item.isDirectory)
-            dirItems.push_back(std::move(item));
-        else
-            fileItems.push_back(std::move(item));
-    }
+    std::vector<SmbFileInfo> dirItems;  // children before their parent
+    collectItems(tree, fileItems, dirItems);
 
     if (!fileItems.empty() && !isCancelled()) {
         auto handle = requestContext(AcquireMode::Metadata);
@@ -77,7 +90,6 @@ void DeleteItemOperator::run() {
         return;
     }
 
-    std::sort(dirItems.begin(), dirItems.end(), [](const SmbFileInfo& a, const SmbFileInfo& b) { return a.path.length() > b.path.length(); });
     {
         auto handle = requestContext(AcquireMode::Metadata);
         handle.submitSync([&](smb2_context* ctx) {

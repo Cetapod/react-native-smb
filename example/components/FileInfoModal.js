@@ -60,7 +60,7 @@ const FileInfoModal = ({ visible, fileInfo, onClose }) => {
                     {fileInfo.name}
                   </Text>
                   <Text style={styles.fileType}>{fileInfo.isDirectory ? 'Directory' : 'File'}</Text>
-                  <Text style={styles.fileSize}>{fileInfo.isDirectory ? `${fileInfo.children.length || 0} item${(fileInfo.children.length || 0) !== 1 ? 's' : ''}` : formatFileSize(fileInfo.size || 0)}</Text>
+                  <Text style={styles.fileSize}>{fileInfo.isDirectory ? (fileInfo.childCount >= 0 ? `${fileInfo.childCount} item${fileInfo.childCount !== 1 ? 's' : ''}` : 'Folder') : formatFileSize(fileInfo.size || 0)}</Text>
                 </View>
               </View>
 

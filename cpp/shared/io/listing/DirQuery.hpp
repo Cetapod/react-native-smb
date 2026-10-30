@@ -28,7 +28,8 @@ class DirQuery {
     // 0 = fully enumerated; otherwise the failing NT status.
     using DoneHandler = std::function<void(uint32_t status)>;
 
-    DirQuery(smb2_context* ctx, std::string path, ChunkHandler onChunk, DoneHandler onDone);
+    // `pattern` is the server-side name filter (wildcards allowed).
+    DirQuery(smb2_context* ctx, std::string path, ChunkHandler onChunk, DoneHandler onDone, std::string pattern = "*");
     DirQuery(const DirQuery&) = delete;
     DirQuery& operator=(const DirQuery&) = delete;
 
@@ -55,6 +56,7 @@ class DirQuery {
     std::string path_;
     ChunkHandler onChunk_;
     DoneHandler onDone_;
+    std::string pattern_;
 
     smb2_file_id fileId_{};
     bool opened_{false};

@@ -66,6 +66,15 @@ Cross-task parallelism is the pool. Within a single transfer, `SmbFileIO` pipeli
 
 Lookups share one connection: up to 16 directory queries (expansions and counts) and, separately, up to 32 security-descriptor queries in flight. Lookups start in top-level order — everything under an earlier top-level entry before anything under a later one — and directory queries go on the wire before security descriptors. An entry is ready once its lookups finish — for an expanded directory, also all of its children, whose count becomes `childCount` without another query, so each directory is opened once. Ready top-level entries are emitted in server order through the task's `EntryStream` (`subscribeEntries`), which also stores the final result.
 
+The same engine backs every other directory walk through `listing::listOnCtx`, a non-streaming call on an already-held slot; libsmb2's `opendir` is no longer used:
+
+| Caller | Listing |
+| ------ | ------- |
+| `deleteItem` | whole tree once (`maxDepth: -1`, no counts), then files and directories deepest-first |
+| `copyItem`, `duplicateItem` | whole source tree once; total size and copy plan come from it |
+| `duplicateItem` naming | parent filtered by the server to `"<base> copy*"`, no counts |
+| `getPathInfo` | none for files: `smb2_stat` and the SD query run together; folders read their own entries once for `childCount` |
+
 ## Diagnostics
 
 ```typescript

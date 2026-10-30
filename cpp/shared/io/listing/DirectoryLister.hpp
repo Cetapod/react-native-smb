@@ -30,6 +30,10 @@ namespace listing {
 struct DirectoryListOptions {
     // Nested levels to expand into `children`: 0 = this level only, -1 = unlimited.
     int maxDepth{0};
+    // Count directories at the depth limit; when false their childCount stays -1.
+    bool countChildren{true};
+    // Server-side name filter for the top-level directory (wildcards allowed).
+    std::string pattern{"*"};
     size_t minBatch{10};
     std::chrono::milliseconds maxDelay{100};
     // Directory expansions and child counts in flight on the connection. They
@@ -156,6 +160,12 @@ class DirectoryLister {
     std::optional<Clock::time_point> drainDeadline_;
     Clock::time_point lastActivity_;
 };
+
+// Lists on an exclusively held context without streaming and returns the
+// top-level entries (with `children` up to maxDepth). Returns what was listed
+// so far when cancelled; callers check the token. Throws SmbException on failure.
+std::vector<SmbFileInfo> listOnCtx(smb2_context* ctx, SmbConnectionManager& manager, const std::string& path,
+                                   const DirectoryListOptions& options, const CancellationToken& cancel);
 
 }  // namespace listing
 }  // namespace react_native_smb
