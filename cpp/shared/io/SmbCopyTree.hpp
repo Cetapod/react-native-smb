@@ -15,6 +15,7 @@
 #include "../core/CancellationToken.hpp"
 #include "../core/SmbEnums.hpp"
 #include "../util/SmbException.hpp"
+#include "PipelinedOps.hpp"
 #include "SmbPathUtil.hpp"
 #include "listing/DirectoryLister.hpp"
 #include "transfer/SmbFileCopyInternal.hpp"
@@ -29,6 +30,25 @@ struct CopyTreeSourceInfo {
 };
 
 namespace copy_tree_detail {
+constexpr size_t kMaxFoldersInFlight = 16;
+
+struct CopyJob {
+    std::string src;
+    std::string dst;
+    int64_t size;
+};
+
+// Every file of a listed tree with its destination path.
+inline void collectFiles(const std::vector<SmbFileInfo>& items, const std::string& dstDir, std::vector<CopyJob>& files) {
+    for (const auto& item : items) {
+        const std::string dest = path_util::buildUrl(dstDir, item.name);
+        if (item.isDirectory)
+            collectFiles(item.children, dest, files);
+        else
+            files.push_back({item.path, dest, item.size});
+    }
+}
+
 inline int64_t totalFileSize(const std::vector<SmbFileInfo>& entries) {
     int64_t total = 0;
     for (const auto& entry : entries) total += entry.isDirectory ? totalFileSize(entry.children) : entry.size;
@@ -113,12 +133,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         return;
     }
 
-    struct CopyJob {
-        std::string src;
-        std::string dst;
-        int64_t size;
-    };
-    std::vector<CopyJob> files;
+    std::vector<copy_tree_detail::CopyJob> files;
     const std::string normToRoot = normTo;
     sharedLease->submitSync([&](smb2_context* ctx) {
         if (cancel.cancelled()) {
@@ -138,26 +153,30 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         }
         if (!recursive) return;
 
-        std::function<void(const std::vector<SmbFileInfo>&, const std::string&)> walk = [&](const std::vector<SmbFileInfo>& items,
-                                                                                             const std::string& dstDir) {
-            for (const auto& item : items) {
-                if (cancel.cancelled()) return;
-                std::string destItem = path_util::buildUrl(dstDir, item.name);
-                if (item.isDirectory) {
-                    std::string normDest = path_util::normalized(destItem);
-                    const int r = smb2_mkdir(ctx, normDest.c_str());
-                    if (r < 0) {
-                        SmbException::raiseFromSmb(
-                            ctx,
-                            r, "Failed to create destination directory: " + std::string(smb2_get_error(ctx)));
-                    }
-                    walk(item.children, destItem);
-                } else {
-                    files.push_back({item.path, destItem, item.size});
+        copy_tree_detail::collectFiles(source.entries, toPath, files);
+
+        // Folders in parallel; each one's subfolders once it exists.
+        PipelinedOps ops(ctx, sharedLease->manager(), cancel, copy_tree_detail::kMaxFoldersInFlight, "Copy Failed");
+        std::function<void(const std::vector<SmbFileInfo>&, const std::string&)> createFolders =
+            [&](const std::vector<SmbFileInfo>& items, const std::string& dstDir) {
+                for (const auto& item : items) {
+                    if (!item.isDirectory) continue;
+                    const std::string dest = path_util::buildUrl(dstDir, item.name);
+                    const std::string norm = path_util::normalized(dest);
+                    const std::vector<SmbFileInfo>* children = &item.children;
+                    ops.submit([norm](smb2_context* c, smb2_command_cb cb, void* data) { return smb2_mkdir_async(c, norm.c_str(), cb, data); },
+                               [&, children, dest](int status, void*) {
+                                   if (status < 0) {
+                                       ops.failFromErrno(status, "Failed to create destination directory: " +
+                                                                     std::string(ops.ctx() ? smb2_get_error(ops.ctx()) : "connection lost"));
+                                       return;
+                                   }
+                                   createFolders(*children, dest);
+                               });
                 }
-            }
-        };
-        walk(source.entries, toPath);
+            };
+        createFolders(source.entries, toPath);
+        ops.run();
     });
 
     if (cancel.cancelled()) return;
