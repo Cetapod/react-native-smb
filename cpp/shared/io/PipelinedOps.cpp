@@ -42,6 +42,7 @@ void PipelinedOps::fail(SmbErrorCode code, std::string message) {
 }
 
 void PipelinedOps::failFromErrno(int result, const std::string& message) {
+    if (result == kNotSent) return;  // only happens while already stopping
     fail(static_cast<SmbErrorCode>(SmbErrorMapper::fromSmbFailure(result, 0, message)), message);
 }
 
@@ -79,7 +80,10 @@ void PipelinedOps::launch() {
     while (ctx_ && !queued_.empty() && inFlight_.size() < maxInFlight_) {
         std::unique_ptr<Op> op = std::move(queued_.front());
         queued_.pop_front();
-        if (stopping_ && !op->cleanup) continue;
+        if (stopping_ && !op->cleanup) {
+            notify(*op, kNotSent, nullptr);
+            continue;
+        }
 
         Op* raw = op.get();
         inFlight_.push_back(std::move(op));
@@ -100,16 +104,19 @@ void PipelinedOps::onReply(smb2_context* /*smb2*/, int status, void* commandData
     if (it == self.inFlight_.end()) return;
     std::unique_ptr<Op> op = std::move(*it);
     self.inFlight_.erase(it);
+    self.notify(*op, status, commandData);
+}
 
+void PipelinedOps::notify(Op& op, int status, void* commandData) {
     try {
-        if (op->done) op->done(status, commandData);
+        if (op.done) op.done(status, commandData);
     } catch (const SmbException& e) {
-        self.fail(e.code(), e.what());
+        fail(e.code(), e.what());
     } catch (const std::exception& e) {
-        self.fail(SmbErrorCode::Unknown, self.label_ + ": " + e.what());
+        fail(SmbErrorCode::Unknown, label_ + ": " + e.what());
     } catch (...) {
         // Never unwind through libsmb2's C callback stack.
-        self.fail(SmbErrorCode::Unknown, self.label_ + ": unknown error");
+        fail(SmbErrorCode::Unknown, label_ + ": unknown error");
     }
 }
 

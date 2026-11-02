@@ -3,6 +3,7 @@
 #include <smb2/libsmb2.h>
 #include <smb2/smb2.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -18,6 +19,7 @@
 #include "PipelinedOps.hpp"
 #include "SmbPathUtil.hpp"
 #include "listing/DirectoryLister.hpp"
+#include "transfer/SmbConcurrentFileCopy.hpp"
 #include "transfer/SmbFileCopyInternal.hpp"
 
 namespace react_native_smb {
@@ -31,6 +33,7 @@ struct CopyTreeSourceInfo {
 
 namespace copy_tree_detail {
 constexpr size_t kMaxFoldersInFlight = 16;
+constexpr size_t kMaxFilesInFlight = 8;
 
 struct CopyJob {
     std::string src;
@@ -187,11 +190,38 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         return;
     }
 
-    for (const auto& job : files) {
-        if (cancel.cancelled()) break;
+    const auto copyOne = [&](const copy_tree_detail::CopyJob& job) {
         sharedLease->submitSync([&](smb2_context* ctx) {
             smbCopyFileAsync(ctx, sharedLease->manager(), path_util::normalized(job.src),
                              path_util::normalized(job.dst), totalBytesCopied, source.totalSize, onProgress, cancel);
+        });
+    };
+
+    // The first non-empty file goes alone: it finds out whether the server
+    // supports server-side copy (copying through the client if not).
+    auto probe = std::find_if(files.begin(), files.end(), [](const copy_tree_detail::CopyJob& job) { return job.size > 0; });
+    if (probe == files.end()) probe = files.begin();
+    copyOne(*probe);
+    files.erase(probe);
+    if (cancel.cancelled() || files.empty()) {
+        if (!cancel.cancelled() && onProgress) {
+            onProgress(static_cast<double>(source.totalSize), static_cast<double>(source.totalSize));
+        }
+        return;
+    }
+
+    if (sharedLease->manager().capabilities().serverSideCopyUnsupported.load()) {
+        for (const auto& job : files) {
+            if (cancel.cancelled()) break;
+            copyOne(job);
+        }
+    } else {
+        std::vector<detail::FileCopyJob> jobs;
+        jobs.reserve(files.size());
+        for (const auto& job : files) jobs.push_back({path_util::normalized(job.src), path_util::normalized(job.dst)});
+        sharedLease->submitSync([&](smb2_context* ctx) {
+            detail::copyFilesServerSide(ctx, sharedLease->manager(), jobs, copy_tree_detail::kMaxFilesInFlight, totalBytesCopied,
+                                        source.totalSize, onProgress, cancel);
         });
     }
 

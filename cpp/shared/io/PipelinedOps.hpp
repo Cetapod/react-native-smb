@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <climits>
 #include <cstddef>
 #include <deque>
 #include <functional>
@@ -32,8 +33,10 @@ class PipelinedOps {
    public:
     // Queues one request with the given callback; returns 0 when queued.
     using Issue = std::function<int(smb2_context* ctx, smb2_command_cb cb, void* cbData)>;
-    // Receives the request's status and reply (libsmb2's callback arguments).
+    // Receives the request's status and reply (libsmb2's callback arguments), or
+    // kNotSent when the operation was dropped because the runner is stopping.
     using Done = std::function<void(int status, void* commandData)>;
+    static constexpr int kNotSent = INT_MIN;
 
     PipelinedOps(smb2_context* ctx, SmbConnectionManager& manager, CancellationToken cancel, size_t maxInFlight, std::string label);
     ~PipelinedOps();
@@ -69,6 +72,7 @@ class PipelinedOps {
     };
 
     static void onReply(smb2_context* smb2, int status, void* commandData, void* privateData);
+    void notify(Op& op, int status, void* commandData);
     void launch();
     void stop();
     void pollOnce();
