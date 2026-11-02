@@ -69,6 +69,18 @@ open source, create destination
 - A failure after data started moving fails the copy; the partial destination is deleted, as with the client copy.
 - Server-side copy only works within one share, which every pool slot uses.
 
+## Pipelined tree operations
+
+Recursive delete and copy send one small request per file or folder. `PipelinedOps` keeps several of them in flight on one held slot; each completion may submit follow-up requests, which expresses the ordering. The first failure or a cancel stops new requests, drains the ones in flight, and still runs cleanup (closing handles, removing partial files).
+
+| Operation | In flight | Ordering |
+|-----------|-----------|----------|
+| `deleteItem` | 16 requests | files and empty folders at once; a folder once its contents are gone; the root folder last |
+| Copy: folders | 16 requests | a folder once its parent exists |
+| Copy: files | 8 files | each file runs open → stat → resume key → COPYCHUNK_WRITE → fsync → close as its own chain |
+
+A recursive copy sends its first non-empty file alone to find out whether the server supports server-side copy. If it does, the remaining files are copied 8 at a time; if not, they are copied through the client one after another. Files in progress when a copy fails or is cancelled are removed; finished files stay.
+
 ## Listing pipeline
 
 `listDirectory` runs `DirectoryLister` on one slot — Interactive for `maxDepth: 0`, Metadata for nested listings — instead of libsmb2's `smb2_opendir` (which reads the whole directory before returning):
@@ -86,7 +98,7 @@ The same engine backs every other directory walk through `listing::listOnCtx`, a
 
 | Caller | Listing |
 | ------ | ------- |
-| `deleteItem` | whole tree once (`maxDepth: -1`, no counts), then files and directories deepest-first |
+| `deleteItem` | whole tree once (`maxDepth: -1`, no counts), then pipelined deletes (see above) |
 | `copyItem`, `duplicateItem` | whole source tree once; total size and copy plan come from it |
 | `duplicateItem` naming | parent filtered by the server to `"<base> copy*"`, no counts |
 | `getPathInfo` | none for files: `smb2_stat` and the SD query run together; folders read their own entries once for `childCount` |
