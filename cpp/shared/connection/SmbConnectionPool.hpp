@@ -105,6 +105,8 @@ private:
     std::string serverUrl_;
     std::string shareName_;
     std::shared_ptr<SmbCredentials> credentials_;
+    // Shared with every slot; replaced when the server or share changes.
+    std::shared_ptr<ServerCapabilities> capabilities_{std::make_shared<ServerCapabilities>()};
 
     // Pool observers
     std::map<size_t, PoolObserver> observers_;

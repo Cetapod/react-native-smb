@@ -53,6 +53,22 @@ Slot 0 is application-level scheduling on top of what libsmb2 provides — inter
 
 Cross-task parallelism is the pool. Within a single transfer, `SmbFileIO` pipelines up to eight SMB2 READ/WRITE on the same `smb2_context` (`kMaxInFlight` in `SmbFileIO.cpp`). Same connection, same session — credit-based pipelining, separate from slot assignment.
 
+## Server-side copy
+
+`copyItem` and `duplicateItem` copy file data inside the server, so it never crosses the client's network link:
+
+```
+open source, create destination
+→ FSCTL_SRV_REQUEST_RESUME_KEY on the source        24-byte key
+→ FSCTL_SRV_COPYCHUNK_WRITE on the destination       up to 4 in flight, 16 × 1 MiB chunks each
+→ fsync, close
+```
+
+- Each request stays within the protocol's default server limits (256 chunks, 1 MiB each, 16 MiB total). Progress advances per completed request.
+- If the server rejects the copy before any data has moved (`NOT_SUPPORTED`, `INVALID_DEVICE_REQUEST`, `NOT_IMPLEMENTED`, `INVALID_PARAMETER`), the file is copied through the client with pipelined READ/WRITE instead. The rejection is remembered in `ServerCapabilities`, shared by every pool slot and replaced when the server or share changes, so it is probed and logged once.
+- A failure after data started moving fails the copy; the partial destination is deleted, as with the client copy.
+- Server-side copy only works within one share, which every pool slot uses.
+
 ## Listing pipeline
 
 `listDirectory` runs `DirectoryLister` on one slot — Interactive for `maxDepth: 0`, Metadata for nested listings — instead of libsmb2's `smb2_opendir` (which reads the whole directory before returning):

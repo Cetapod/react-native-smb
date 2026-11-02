@@ -1,5 +1,6 @@
 #include "../SmbFileIO.hpp"
 #include "SmbFileCopyInternal.hpp"
+#include "SmbServerSideCopy.hpp"
 #include "SmbTransferCore.hpp"
 
 #include <algorithm>
@@ -303,20 +304,25 @@ int64_t smbCopyFileAsync(void* context, SmbConnectionManager& manager, const std
         return 0;
     }
 
-    state.core.chunkSize = std::min(detail::capAsyncChunkSize(smb2_get_max_read_size(ctx)),
-                                    detail::capAsyncChunkSize(smb2_get_max_write_size(ctx)));
-    detail::runTransfer(
-        state.core, manager,
-        [&] {
-            for (int i = 0; i < detail::kMaxInFlight && !state.core.failure.errored; ++i) state.submitRead();
-        },
-        [&] { return state.done() && state.core.inFlight == 0; }, [&] { return state.stuck(); },
-        [&] { state.cancel(); },
-        [&] {
-            state.source = nullptr;
-            state.destination = nullptr;
-        },
-        "Copy Failed");
+    const auto clearHandles = [&] {
+        state.source = nullptr;
+        state.destination = nullptr;
+    };
+    // Prefer copying inside the server; read and write through the client only
+    // when the server rejects server-side copy.
+    const auto serverResult = detail::serverSideCopy(state.core, manager, state.source, state.destination, state.totalCopied,
+                                                     state.totalSize, clearHandles);
+    if (serverResult == detail::ServerCopyResult::Unsupported) {
+        state.core.chunkSize = std::min(detail::capAsyncChunkSize(smb2_get_max_read_size(ctx)),
+                                        detail::capAsyncChunkSize(smb2_get_max_write_size(ctx)));
+        detail::runTransfer(
+            state.core, manager,
+            [&] {
+                for (int i = 0; i < detail::kMaxInFlight && !state.core.failure.errored; ++i) state.submitRead();
+            },
+            [&] { return state.done() && state.core.inFlight == 0; }, [&] { return state.stuck(); },
+            [&] { state.cancel(); }, clearHandles, "Copy Failed");
+    }
     if (state.core.failure.errored) {
         state.cleanupOnError();
         detail::raiseTransferError(state.core.failure.code, state.core.failure.message);
