@@ -14,12 +14,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-B69vWf4d.js"></script>
-  <script type="module" crossorigin src="/react-native-smb/assets/docs-C6cW2HzL.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-TBKdJ_kK.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-Bszxl6AG.js"></script>
   <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BMOZR0bK.css">
-  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-ClZj_afx.css">
 </head>
-<body class="docs-body" data-docs-page="types">
+<body class="docs-body" data-docs-page="types" data-docs-version="1.1">
 
   <nav class="nav" data-site-nav></nav>
 
@@ -83,9 +83,9 @@
           </div>
         </div>
 
-        <div class="type-card" id="smb-share-list" data-searchable="SmbShareList name comment shares">
+        <div class="type-card" id="smb-share" data-searchable="SmbShare name comment shares listShares">
           <div class="type-card__header">
-            <span class="type-card__name">SmbShareList</span>
+            <span class="type-card__name">SmbShare</span>
             <span class="type-badge type-badge--interface">interface</span>
           </div>
           <p class="type-card__desc">One entry from <code>listShares()</code>.</p>
@@ -100,7 +100,7 @@
           </div>
         </div>
 
-        <div class="type-card" id="smb-file-info" data-searchable="SmbFileInfo name path size isDirectory modifiedAt children">
+        <div class="type-card" id="smb-file-info" data-searchable="SmbFileInfo name path size isDirectory modifiedAt children securityDescriptor">
           <div class="type-card__header">
             <span class="type-card__name">SmbFileInfo</span>
             <span class="type-badge type-badge--interface">interface</span>
@@ -118,8 +118,27 @@
                 <tr><td><code>accessedAt</code></td><td class="col-type">number</td><td>Last access time</td></tr>
                 <tr><td><code>createdAt</code></td><td class="col-type">number</td><td>Creation time</td></tr>
                 <tr><td><code>changedAt</code></td><td class="col-type">number</td><td>Metadata change time</td></tr>
-                <tr><td><code>childCount</code></td><td class="col-type">number?</td><td>Direct children count</td></tr>
-                <tr><td><code>children</code></td><td class="col-type">SmbFileInfo[]?</td><td>Nested entries (recursive list)</td></tr>
+                <tr><td><code>childCount</code></td><td class="col-type">number?</td><td>Number of direct children (folders)</td></tr>
+                <tr><td><code>children</code></td><td class="col-type">SmbFileInfo[]?</td><td>Nested entries from <code>listDirectory</code> with <code>maxDepth</code> ≠ 0; never set by <code>getPathInfo</code></td></tr>
+                <tr><td><code>securityDescriptor</code></td><td class="col-type">SmbSecurityDescriptor?</td><td>Present when requested and readable</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="list-directory-options" data-searchable="ListDirectoryOptions maxDepth includeSecurityDescriptor batchSize listDirectory options">
+          <div class="type-card__header">
+            <span class="type-card__name">ListDirectoryOptions</span>
+            <span class="type-badge type-badge--interface">interface</span>
+          </div>
+          <p class="type-card__desc">Options for <code>listDirectory(path, options?)</code>. All fields are optional.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>maxDepth</code></td><td class="col-type">number</td><td>Nested levels returned as <code>children</code>: <code>0</code> = this folder only (default), <code>-1</code> = unlimited</td></tr>
+                <tr><td><code>includeSecurityDescriptor</code></td><td class="col-type">boolean</td><td>Fetch each item's SD (default <code>false</code>)</td></tr>
+                <tr><td><code>batchSize</code></td><td class="col-type">number</td><td>Top-level entries per streamed batch (default 10)</td></tr>
               </tbody>
             </table>
           </div>
@@ -166,7 +185,7 @@
             <table class="docs-table">
               <thead><tr><th>PoolInfo field</th><th>Type</th><th>Description</th></tr></thead>
               <tbody>
-                <tr><td><code>poolSize</code></td><td class="col-type">number</td><td>Total slots (4)</td></tr>
+                <tr><td><code>poolSize</code></td><td class="col-type">number</td><td>Current number of slots</td></tr>
                 <tr><td><code>slots</code></td><td class="col-type">PoolSlotInfo[]</td><td>Per-slot state</td></tr>
               </tbody>
             </table>
@@ -175,7 +194,7 @@
             <table class="docs-table">
               <thead><tr><th>PoolSlotInfo field</th><th>Type</th><th>Description</th></tr></thead>
               <tbody>
-                <tr><td><code>index</code></td><td class="col-type">number</td><td>Slot index 0–3</td></tr>
+                <tr><td><code>index</code></td><td class="col-type">number</td><td>Slot index</td></tr>
                 <tr><td><code>interactiveOnly</code></td><td class="col-type">boolean</td><td>Slot 0 flag</td></tr>
                 <tr><td><code>state</code></td><td class="col-type">SlotState</td><td>Idle / Assigned / Activating</td></tr>
                 <tr><td><code>isConnected</code></td><td class="col-type">boolean</td><td>TCP session active</td></tr>
@@ -192,7 +211,7 @@
             <span class="type-card__name">SmbSecurityDescriptor / SmbAcl / SmbAce</span>
             <span class="type-badge type-badge--interface">interface</span>
           </div>
-          <p class="type-card__desc">Windows ACL from <code>getSecurityDescriptor()</code>.</p>
+          <p class="type-card__desc">Windows ACL from <code>getSecurityDescriptor()</code>, or <code>SmbFileInfo.securityDescriptor</code> when requested.</p>
           <div class="docs-table-wrap">
             <table class="docs-table">
               <thead><tr><th>SmbSecurityDescriptor</th><th>Type</th><th>Description</th></tr></thead>
@@ -259,7 +278,7 @@
           </div>
         </div>
 
-        <div class="type-card" id="smb-error" data-searchable="SmbError Unknown Cancelled NotFound AccessDenied NotConnected TimedOut">
+        <div class="type-card" id="smb-error" data-searchable="SmbError Unknown Cancelled NotFound AccessDenied NotConnected TimedOut AuthenticationFailed">
           <div class="type-card__header">
             <span class="type-card__name">SmbError</span>
             <span class="type-badge type-badge--enum">enum</span>
@@ -267,23 +286,24 @@
           <p class="type-card__desc">Error codes on <code>SmbTaskError.code</code>.</p>
           <div class="docs-table-wrap">
             <table class="docs-table">
-              <thead><tr><th>Member</th><th>Value</th><th>Category</th></tr></thead>
+              <thead><tr><th>Member</th><th>Value</th><th>Meaning</th></tr></thead>
               <tbody>
-                <tr><td><code>Unknown</code></td><td class="col-value">0</td><td>General</td></tr>
-                <tr><td><code>Cancelled</code></td><td class="col-value">1</td><td>General</td></tr>
-                <tr><td><code>InvalidArgument</code></td><td class="col-value">100</td><td>Argument</td></tr>
-                <tr><td><code>NotFound</code></td><td class="col-value">101</td><td>Filesystem</td></tr>
-                <tr><td><code>AlreadyExists</code></td><td class="col-value">102</td><td>Filesystem</td></tr>
-                <tr><td><code>AccessDenied</code></td><td class="col-value">103</td><td>Filesystem</td></tr>
-                <tr><td><code>NotDirectory</code></td><td class="col-value">104</td><td>Filesystem</td></tr>
-                <tr><td><code>IsDirectory</code></td><td class="col-value">105</td><td>Filesystem</td></tr>
-                <tr><td><code>DirectoryNotEmpty</code></td><td class="col-value">106</td><td>Filesystem</td></tr>
-                <tr><td><code>NotConnected</code></td><td class="col-value">200</td><td>Connection</td></tr>
-                <tr><td><code>ConnectionRefused</code></td><td class="col-value">201</td><td>Connection</td></tr>
-                <tr><td><code>TimedOut</code></td><td class="col-value">202</td><td>Connection</td></tr>
-                <tr><td><code>Busy</code></td><td class="col-value">300</td><td>Resource</td></tr>
-                <tr><td><code>NoSpace</code></td><td class="col-value">301</td><td>Resource</td></tr>
-                <tr><td><code>Io</code></td><td class="col-value">302</td><td>Resource</td></tr>
+                <tr><td><code>Unknown</code></td><td class="col-value">0</td><td>An unexpected internal error. SMB operation failures use a specific code.</td></tr>
+                <tr><td><code>Cancelled</code></td><td class="col-value">1</td><td>The caller cancelled before the operation failed.</td></tr>
+                <tr><td><code>InvalidArgument</code></td><td class="col-value">100</td><td>Invalid URL, path, or operation argument.</td></tr>
+                <tr><td><code>NotFound</code></td><td class="col-value">101</td><td>The remote item does not exist.</td></tr>
+                <tr><td><code>AlreadyExists</code></td><td class="col-value">102</td><td>A destination or duplicate name is already present.</td></tr>
+                <tr><td><code>AccessDenied</code></td><td class="col-value">103</td><td>The account lacks access to the item or share.</td></tr>
+                <tr><td><code>NotDirectory</code></td><td class="col-value">104</td><td>A directory operation targeted a file.</td></tr>
+                <tr><td><code>IsDirectory</code></td><td class="col-value">105</td><td>A file operation targeted a directory.</td></tr>
+                <tr><td><code>DirectoryNotEmpty</code></td><td class="col-value">106</td><td>A directory could not be removed because it contains items.</td></tr>
+                <tr><td><code>NotConnected</code></td><td class="col-value">200</td><td>The SMB connection closed or is unavailable.</td></tr>
+                <tr><td><code>ConnectionRefused</code></td><td class="col-value">201</td><td>The server refused the connection.</td></tr>
+                <tr><td><code>TimedOut</code></td><td class="col-value">202</td><td>The operation made no progress before its timeout.</td></tr>
+                <tr><td><code>AuthenticationFailed</code></td><td class="col-value">203</td><td>Credentials or account state prevented authentication.</td></tr>
+                <tr><td><code>Busy</code></td><td class="col-value">300</td><td>The item is locked or otherwise busy.</td></tr>
+                <tr><td><code>NoSpace</code></td><td class="col-value">301</td><td>Local or remote storage is full.</td></tr>
+                <tr><td><code>Io</code></td><td class="col-value">302</td><td>Other local or remote I/O failure.</td></tr>
               </tbody>
             </table>
           </div>
@@ -318,7 +338,7 @@
               </tbody>
             </table>
           </div>
-          <p style="padding:0 24px 16px;font-size:0.85rem;color:var(--text-secondary)">* <code>ListDirectory</code> uses Interactive for shallow lists, Metadata when recursive.</p>
+          <p style="padding:0 24px 16px;font-size:0.85rem;color:var(--text-secondary)">* <code>ListDirectory</code> uses Interactive for <code>maxDepth: 0</code>, Metadata for nested lists.</p>
         </div>
 
         <div class="type-card" id="slot-state" data-searchable="SlotState Idle Assigned Activating pool slot">
@@ -340,7 +360,7 @@
 
         <h2 id="classes">Classes</h2>
 
-        <div class="type-card" id="smb-task" data-searchable="SmbTask result subscribe cancel settleAll id progress status">
+        <div class="type-card" id="smb-task" data-searchable="SmbTask result wait subscribe cancel settleAll id progress status">
           <div class="type-card__header">
             <span class="type-card__name">SmbTask&lt;T&gt;</span>
             <span class="type-badge type-badge--class">class</span>
@@ -354,10 +374,27 @@
                 <tr><td><code>progress</code></td><td class="col-type">number</td><td>0–1 getter (after subscribe)</td></tr>
                 <tr><td><code>status</code></td><td class="col-type">TaskStatus</td><td>Status getter (after subscribe)</td></tr>
                 <tr><td><code>result()</code></td><td class="col-type">Promise&lt;T&gt;</td><td>Await typed result</td></tr>
+                <tr><td><code>wait()</code></td><td class="col-type">Promise&lt;void&gt;</td><td>Settles like <code>result()</code> without reading the result value</td></tr>
                 <tr><td><code>subscribe(listener?)</code></td><td class="col-type">() =&gt; void</td><td>Subscribe; returns unsubscribe</td></tr>
                 <tr><td><code>cancel()</code></td><td class="col-type">void</td><td>Abort operation</td></tr>
                 <tr><td><code>get()</code></td><td class="col-type">SmbTaskState | null</td><td>One-shot snapshot</td></tr>
                 <tr><td><code>SmbTask.settleAll(tasks)</code></td><td class="col-type">static</td><td>Promise.allSettled over results</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="type-card" id="smb-list-task" data-searchable="SmbListTask subscribeEntries stream batch listDirectory entries">
+          <div class="type-card__header">
+            <span class="type-card__name">SmbListTask</span>
+            <span class="type-badge type-badge--class">class</span>
+          </div>
+          <p class="type-card__desc">The <code>SmbTask&lt;SmbFileInfo[]&gt;</code> returned by <code>listDirectory</code>, plus streaming. See <a href="/react-native-smb/docs/api.html#listdirectory">listDirectory</a>.</p>
+          <div class="docs-table-wrap">
+            <table class="docs-table">
+              <thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>subscribeEntries(listener)</code></td><td class="col-type">() =&gt; void</td><td>Receive batches of top-level entries in server order, replaying earlier batches first; returns unsubscribe</td></tr>
               </tbody>
             </table>
           </div>

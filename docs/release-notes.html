@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    .doc-search:not(.doc-search--open),[data-doc-search]:not(.doc-search--open){display:none!important;visibility:hidden!important;pointer-events:none!important}
+    .nav__icon-btn svg,.nav__theme svg{width:18px;height:18px;max-width:none}
+    .doc-search__icon{width:20px;height:20px;max-width:none}
+  </style>
+  <script>try{var t=localStorage.getItem("docs-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Release notes — @cetapod/react-native-smb</title>
+  <link rel="icon" type="image/svg+xml" href="/react-native-smb/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-TBKdJ_kK.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-Bszxl6AG.js"></script>
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BMOZR0bK.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-ClZj_afx.css">
+</head>
+<body class="docs-body" data-docs-page="release-notes" data-docs-version="1.1">
+
+  <nav class="nav" data-site-nav></nav>
+
+
+  <div class="docs-overlay" data-docs-overlay></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav class="docs-nav" data-docs-nav></nav>
+    </aside>
+
+    <div class="docs-body-wrap">
+      <div class="docs-main">
+
+      <article class="docs-content">
+        <h1>Release notes</h1>
+        <p class="docs-lead">
+          Changes in each 1.1 release, newest first. For earlier releases, see the
+          <a href="/react-native-smb/docs/v1.0/release-notes.html">v1.0 release notes</a>.
+        </p>
+
+        <h2 id="v1-1-0">1.1.0</h2>
+        <p class="docs-release-date">November 3, 2026</p>
+        <p>Streaming directory listings, one listing engine for every directory walk, server-side file copy, and pipelined delete and copy.</p>
+
+        <h3>Breaking changes</h3>
+        <p><strong><code>listDirectory</code> takes an options object.</strong> <code>recursive</code> is gone; <code>maxDepth</code> alone decides the depth.</p>
+        <div class="docs-code">
+          <div class="docs-code__header"><span class="docs-code__filename">migrate-list.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+          <pre><span class="cmt">// before</span>
+smb.<span class="fn">listDirectory</span>(path, <span class="kw">false</span>, <span class="num">-1</span>);
+smb.<span class="fn">listDirectory</span>(path, <span class="kw">true</span>, <span class="num">-1</span>);
+smb.<span class="fn">listDirectory</span>(path, <span class="kw">true</span>, <span class="num">2</span>, <span class="kw">true</span>);
+
+<span class="cmt">// after</span>
+smb.<span class="fn">listDirectory</span>(path);
+smb.<span class="fn">listDirectory</span>(path, { <span class="prop">maxDepth</span>: <span class="num">-1</span> });
+smb.<span class="fn">listDirectory</span>(path, { <span class="prop">maxDepth</span>: <span class="num">2</span>, <span class="prop">includeSecurityDescriptor</span>: <span class="kw">true</span> });</pre>
+        </div>
+        <p>The old positional signature is not supported; extra arguments are ignored, which usually gives a single-level list.</p>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Option</th><th>Default</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td><code>maxDepth</code></td><td class="col-value">0</td><td><code>0</code>: this folder only. <code>&gt; 0</code>: nested <code>children</code> up to that depth. <code>-1</code>: unlimited.</td></tr>
+              <tr><td><code>includeSecurityDescriptor</code></td><td class="col-value">false</td><td>Fetch the SD of every entry (one request per entry; costly on large folders).</td></tr>
+              <tr><td><code>batchSize</code></td><td class="col-value">10</td><td>Ready top-level entries per streamed batch (batches also flush every 100 ms).</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong><code>getPathInfo</code> no longer returns <code>children</code>.</strong> Folders expose <code>childCount</code> only; list their contents with <code>listDirectory</code>.</p>
+        <div class="docs-code">
+          <div class="docs-code__header"><span class="docs-code__filename">migrate-info.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+          <pre><span class="kw">const</span> info = <span class="kw">await</span> smb.<span class="fn">getPathInfo</span>(<span class="str">'/Media'</span>).<span class="fn">result</span>();
+
+info.childCount;                                           <span class="cmt">// was info.children.length</span>
+<span class="kw">const</span> items = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/Media'</span>).<span class="fn">result</span>();  <span class="cmt">// was info.children</span></pre>
+        </div>
+
+        <h3>New</h3>
+        <ul>
+          <li>
+            <strong>Streaming listings.</strong> <code>listDirectory</code> returns an <code>SmbListTask</code>.
+            <code>subscribeEntries(batch =&gt; …)</code> delivers top-level entries while the listing runs and
+            replays earlier batches to late subscribers. <code>result()</code> still returns the complete list.
+          </li>
+          <li>
+            <strong><code>SmbTask.wait()</code></strong> resolves when the task completes without converting
+            the result — useful after consuming streamed entries.
+          </li>
+        </ul>
+
+        <h3>Performance</h3>
+        <p>Measured on one SMB share; numbers vary with server and network.</p>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Listing</th><th>1.0.4</th><th>1.1.0</th><th>Change</th></tr></thead>
+            <tbody>
+              <tr><td>First entries of a 6,556-entry folder</td><td>468 ms (all at once)</td><td>~50 ms</td><td>~10× sooner</td></tr>
+              <tr><td>Same folder with security descriptors</td><td>46.5 s</td><td>2.4 s</td><td>19× faster</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Duplicate a file</th><th>1.0.4</th><th>1.1.0</th><th>Change</th></tr></thead>
+            <tbody>
+              <tr><td>512 MB</td><td>10.26 s</td><td>0.19 s</td><td>53× faster</td></tr>
+              <tr><td>1 GB</td><td>19.7 s</td><td>0.29 s</td><td>68× faster</td></tr>
+              <tr><td>2 GB</td><td>40.63 s</td><td>0.44 s</td><td>92× faster</td></tr>
+              <tr><td>5 GB</td><td>88.5 s</td><td>0.87 s</td><td>102× faster</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><em>Server-side copy times depend on the server's file system.</em></p>
+        <ul>
+          <li>
+            <strong>Listing:</strong> directories are read with raw <code>QUERY_DIRECTORY</code> requests, and
+            follow-up lookups (subfolders, <code>childCount</code>, SD) are pipelined on one connection. Each
+            directory is opened once.
+          </li>
+          <li>
+            <strong>Delete, copy, duplicate, and <code>getPathInfo</code></strong> use the same engine.
+            <code>getPathInfo</code> reads the item itself instead of listing its parent folder.
+          </li>
+          <li>
+            <strong>Server-side copy:</strong> file data is copied inside the server
+            (<code>FSCTL_SRV_COPYCHUNK_WRITE</code>) instead of through the device. If the server does not
+            support it, files are copied through the client as before.
+          </li>
+          <li>
+            <strong>Pipelined tree operations:</strong> recursive delete and folder creation keep up to 16
+            requests in flight, and recursive copies copy up to 8 files at once.
+          </li>
+        </ul>
+
+        <h3>Other</h3>
+        <ul>
+          <li>Listing entries arrive in server order.</li>
+          <li><code>getPathInfo('/')</code> returns the share root (was <code>NotFound</code>), and links resolve to their target.</li>
+          <li>An empty folder whose server answers <code>STATUS_NO_SUCH_FILE</code> lists as empty instead of failing.</li>
+          <li><code>getPathInfo</code> and <code>includeSecurityDescriptor</code> omit the SD only when access to it is denied; any other SD failure fails the task.</li>
+        </ul>
+
+        <nav class="docs-pager">
+          <a href="/react-native-smb/docs/architecture.html" class="docs-pager__link">
+            <div class="docs-pager__label">Previous</div>
+            <div class="docs-pager__title">Architecture</div>
+          </a>
+          <a href="/react-native-smb/" class="docs-pager__link docs-pager__link--next">
+            <div class="docs-pager__label">Next</div>
+            <div class="docs-pager__title">Back to home</div>
+          </a>
+        </nav>
+      </article>
+    </div>
+      <aside class="docs-rail" data-docs-toc-right aria-label="Page contents"></aside>
+    </div>
+  </div>
+
+  <div data-site-footer></div>
+
+</body>
+</html>

@@ -9,10 +9,10 @@
   </style>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>@cetapod/react-native-smb — Native SMB for React Native</title>
-  <meta name="description" content="SMB client for React Native via libsmb2 and Nitro Modules. SmbTask per operation, 4-slot connection pool, 8-chunk pipelining, React hooks." />
+  <meta name="description" content="SMB client for React Native via libsmb2 and Nitro Modules. SmbTask per operation, streaming listings, server-side copy, connection pool, React hooks." />
   <meta name="keywords" content="react-native, smb, libsmb2, nitro, native-module, file-transfer, nas" />
   <meta property="og:title" content="@cetapod/react-native-smb — Native SMB for React Native" />
-  <meta property="og:description" content="SMB client for React Native via libsmb2 and Nitro Modules. SmbTask per operation, 4-slot connection pool, React hooks." />
+  <meta property="og:description" content="SMB client for React Native via libsmb2 and Nitro Modules. SmbTask per operation, streaming listings, server-side copy, connection pool, React hooks." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/react-native-smb/og-image.svg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -22,8 +22,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/react-native-smb/assets/main-DfxMxBQN.js"></script>
-  <link rel="modulepreload" crossorigin href="/react-native-smb/assets/site-footer-B69vWf4d.js">
+  <script type="module" crossorigin src="/react-native-smb/assets/main-TF2YyH5U.js"></script>
+  <link rel="modulepreload" crossorigin href="/react-native-smb/assets/site-footer-TBKdJ_kK.js">
   <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BMOZR0bK.css">
 </head>
 <body>
@@ -40,7 +40,7 @@
       <div class="hero__text">
         <div class="hero__badge">
           <span class="hero__badge-dot"></span>
-          <span data-version-badge>v1.0.0 — iOS ready, Android coming</span>
+          <span data-version-badge>v1.1.0 — iOS ready, Android coming</span>
         </div>
         <h1 class="hero__title">Native <em>SMB</em><br />for React Native</h1>
         <p class="hero__package">@cetapod/react-native-smb</p>
@@ -137,8 +137,8 @@
       <span class="section-label">Why this library</span>
       <h2 class="section-title">Built for real file operations</h2>
       <p class="section-desc">
-        Not a thin wrapper — a full SMB client with connection pooling,
-        pipelined transfers, and a task model designed for mobile UX.
+        Not a thin wrapper — a full SMB client with streaming listings, server-side copy,
+        connection pooling, pipelined requests, and a task model designed for mobile UX.
       </p>
       <div class="features__grid">
         <article class="feature-card">
@@ -151,19 +151,35 @@
         </article>
         <article class="feature-card">
           <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          </div>
+          <h3>Streaming listings</h3>
+          <p>Large folders render while the scan runs — <code>subscribeEntries</code> delivers entries in batches, and <code>result()</code> still returns the full list.</p>
+          <span class="feature-card__tag">subscribeEntries</span>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </div>
+          <h3>Server-side copy</h3>
+          <p>Copy and duplicate move file data inside the server instead of through the device, falling back to a client copy when the server does not support it.</p>
+          <span class="feature-card__tag">FSCTL_SRV_COPYCHUNK_WRITE</span>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card__icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
           </div>
-          <h3>4-slot connection pool</h3>
-          <p>Up to four parallel SMB sessions. Slot 0 is reserved for interactive ops — list, rename, move — so UI never blocks behind bulk transfers.</p>
+          <h3>Connection pool</h3>
+          <p>Parallel SMB sessions. Slot 0 is reserved for interactive ops — list, rename, move — so UI never blocks behind bulk transfers.</p>
           <span class="feature-card__tag">interactive-priority slot 0</span>
         </article>
         <article class="feature-card">
           <div class="feature-card__icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           </div>
-          <h3>8-chunk pipelining</h3>
-          <p>Within each transfer, up to eight SMB2 READ/WRITE requests in flight on the same connection. Credit-based pipelining for maximum throughput.</p>
-          <span class="feature-card__tag">kMaxInFlight = 8</span>
+          <h3>Pipelined requests</h3>
+          <p>Many SMB2 requests in flight on one connection: eight READ/WRITE chunks per transfer, and up to 16 requests for directory walks and recursive delete and copy.</p>
+          <span class="feature-card__tag">credit-based pipelining</span>
         </article>
         <article class="feature-card">
           <div class="feature-card__icon">
@@ -180,6 +196,14 @@
           <h3>Typed errors</h3>
           <p><code>SmbError</code> and <code>SmbTaskError</code> with structured codes. Know exactly why a connection failed or a transfer was interrupted.</p>
           <span class="feature-card__tag">SmbError · SmbTaskError</span>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3>Security descriptors</h3>
+          <p>Read Windows ACLs for a single item with <code>getSecurityDescriptor</code>, or for every entry of a listing with one option.</p>
+          <span class="feature-card__tag">includeSecurityDescriptor</span>
         </article>
         <article class="feature-card">
           <div class="feature-card__icon">
@@ -222,7 +246,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
           </div>
           <h3>Enterprise document access</h3>
-          <p>Authenticate with domain credentials, read ACLs via <code>getSecurityDescriptor</code>, and integrate with existing SMB infrastructure on iOS.</p>
+          <p>Authenticate with account credentials, read ACLs via <code>getSecurityDescriptor</code>, and integrate with existing SMB infrastructure on iOS.</p>
         </article>
         <article class="use-case">
           <div class="use-case__icon">
@@ -242,7 +266,7 @@
       <h2 class="section-title">Connection pool &amp; pipeline</h2>
       <p class="section-desc">
         Parallelism at two levels — across tasks via the pool,
-        within transfers via chunk pipelining.
+        within a task via pipelined requests.
       </p>
       <div class="architecture__layout">
         <div class="pool-viz">
@@ -293,7 +317,7 @@
         <div class="architecture__details">
           <div class="arch-detail">
             <h4>Interactive-priority scheduling</h4>
-            <p>Slot 0 accepts only interactive operators — shallow list, path info, rename, move. Bulk metadata work uses slots 1–3. When slot 0 is busy, interactive ops overflow to general slots rather than queuing behind downloads.</p>
+            <p>Slot 0 accepts only interactive operators — single-level list, path info, rename, move. Bulk metadata work uses slots 1–3. When slot 0 is busy, interactive ops overflow to general slots rather than queuing behind downloads.</p>
           </div>
           <div class="arch-detail">
             <h4>Independent sessions, not multichannel</h4>
@@ -372,7 +396,7 @@
 };
 
 <span class="kw">await</span> smb.<span class="fn">connect</span>(<span class="str">'smb://192.168.1.100/Media'</span>, creds).<span class="fn">result</span>();
-<span class="kw">const</span> entries = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/'</span>, <span class="kw">false</span>).<span class="fn">result</span>();
+<span class="kw">const</span> entries = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/'</span>).<span class="fn">result</span>();
 
 <span class="kw">const</span> task = smb.<span class="fn">downloadFile</span>(<span class="str">'/video.mp4'</span>, <span class="str">'/local/video.mp4'</span>);
 task.<span class="fn">subscribe</span>((snap) => console.<span class="fn">log</span>(snap.progress));
@@ -429,12 +453,12 @@ unsub();</pre>
   useSubscribe,
 } <span class="kw">from</span> <span class="str">'@cetapod/react-native-smb'</span>;
 
-<span class="kw">function</span> <span class="fn">TransferTray</span>() {
-  <span class="kw">const</span> transfers = <span class="fn">useTransfers</span>();
-  <span class="kw">const</span> { cancel, clear } = <span class="fn">useTransferActions</span>();
+<span class="kw">function</span> <span class="fn">TransferTray</span>({ smb }) {
+  <span class="kw">const</span> transfers = <span class="fn">useTransfers</span>(smb);
+  <span class="kw">const</span> { clearCompleted, hide } = <span class="fn">useTransferActions</span>(smb);
 
   <span class="kw">return</span> transfers.<span class="fn">map</span>((t) => (
-    &lt;Row key={t.id} progress={t.progress} /&gt;
+    &lt;Row key={t.taskId} progress={t.progress} onHide={() => <span class="fn">hide</span>(t.taskId)} /&gt;
   ));
 }
 

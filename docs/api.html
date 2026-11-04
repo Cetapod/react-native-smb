@@ -14,12 +14,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-B69vWf4d.js"></script>
-  <script type="module" crossorigin src="/react-native-smb/assets/docs-C6cW2HzL.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-TBKdJ_kK.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-Bszxl6AG.js"></script>
   <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BMOZR0bK.css">
-  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-ClZj_afx.css">
 </head>
-<body class="docs-body" data-docs-page="api">
+<body class="docs-body" data-docs-page="api" data-docs-version="1.1">
 
   <nav class="nav" data-site-nav></nav>
 
@@ -137,7 +137,7 @@ console.<span class="fn">log</span>(info.server, info.share, info.isConnected);<
             <div class="method-card__badges"><span class="method-badge method-badge--task">task</span></div>
           </div>
           <div class="method-card__body">
-            <p class="method-card__desc">Close the SMB session and release all pool slots.</p>
+            <p class="method-card__desc">Cancel active work and close the SMB session, releasing all pool slots. The client can be reused.</p>
             <div class="docs-code">
               <div class="docs-code__header"><span class="docs-code__filename">disconnect.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
               <pre><span class="kw">await</span> smb.<span class="fn">disconnect</span>().<span class="fn">result</span>();</pre>
@@ -145,11 +145,11 @@ console.<span class="fn">log</span>(info.server, info.share, info.isConnected);<
           </div>
         </div>
 
-        <div class="method-card" data-searchable="listShares enumerate shares SmbShareList">
+        <div class="method-card" data-searchable="listShares enumerate shares SmbShare">
           <div class="method-card__header">
             <div>
               <div class="method-card__name">listShares</div>
-              <div class="method-card__sig">listShares() → SmbTask&lt;SmbShareList[]&gt;</div>
+              <div class="method-card__sig">listShares() → SmbTask&lt;SmbShare[]&gt;</div>
             </div>
             <div class="method-card__badges">
               <span class="method-badge method-badge--task">task</span>
@@ -190,11 +190,11 @@ shares.<span class="fn">forEach</span>((s) => console.<span class="fn">log</span
 
         <h2 id="filesystem">File system</h2>
 
-        <div class="method-card" data-searchable="listDirectory browse folder recursive maxDepth SmbFileInfo">
+        <div class="method-card" data-searchable="listDirectory browse folder maxDepth includeSecurityDescriptor batchSize ListDirectoryOptions SmbListTask subscribeEntries stream SmbFileInfo">
           <div class="method-card__header">
             <div>
               <div class="method-card__name">listDirectory</div>
-              <div class="method-card__sig">listDirectory(path, recursive?, maxDepth?) → SmbTask&lt;SmbFileInfo[]&gt;</div>
+              <div class="method-card__sig">listDirectory(path, options?) → SmbListTask</div>
             </div>
             <div class="method-card__badges">
               <span class="method-badge method-badge--task">task</span>
@@ -202,26 +202,51 @@ shares.<span class="fn">forEach</span>((s) => console.<span class="fn">log</span
             </div>
           </div>
           <div class="method-card__body">
-            <p class="method-card__desc">List directory contents. <code>maxDepth: -1</code> for unlimited recursion. Shallow lists use interactive slot; recursive uses metadata slot.</p>
-            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
-              <tr><td><code>path</code></td><td class="col-type">string</td><td>—</td><td>Directory path</td></tr>
-              <tr><td><code>recursive</code></td><td class="col-type">boolean</td><td>false</td><td>Include subdirectories</td></tr>
-              <tr><td><code>maxDepth</code></td><td class="col-type">number</td><td>-1</td><td>Max recursion depth (-1 = unlimited)</td></tr>
+            <p class="method-card__desc">List directory contents. <code>result()</code> returns <code>SmbFileInfo[]</code>; <code>subscribeEntries()</code> streams top-level entries while the listing runs. Single-level lists use the interactive slot, nested lists (<code>maxDepth</code> ≠ 0) a metadata slot.</p>
+            <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
+              <tr><td><code>maxDepth</code></td><td class="col-type">number</td><td>0</td><td>Nested levels returned as <code>children</code>: <code>0</code> = this folder only, <code>-1</code> = unlimited</td></tr>
+              <tr><td><code>includeSecurityDescriptor</code></td><td class="col-type">boolean</td><td>false</td><td>Fetch each item's SD (one extra query per item, including nested children). Omitted only when access to it is denied; any other SD failure fails the listing.</td></tr>
+              <tr><td><code>batchSize</code></td><td class="col-type">number</td><td>10</td><td>Top-level entries per streamed batch</td></tr>
             </tbody></table></div>
             <div class="docs-code">
               <div class="docs-code__header"><span class="docs-code__filename">list.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
-              <pre><span class="kw">const</span> entries = <span class="kw">await</span> smb
-  .<span class="fn">listDirectory</span>(<span class="str">'/Photos'</span>, <span class="kw">false</span>)
-  .<span class="fn">result</span>();
+              <pre><span class="kw">const</span> entries = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/Photos'</span>).<span class="fn">result</span>();
 
 <span class="kw">const</span> tree = <span class="kw">await</span> smb
-  .<span class="fn">listDirectory</span>(<span class="str">'/'</span>, <span class="kw">true</span>, <span class="num">3</span>)
-  .<span class="fn">result</span>();</pre>
+  .<span class="fn">listDirectory</span>(<span class="str">'/'</span>, { <span class="prop">maxDepth</span>: <span class="num">3</span> })
+  .<span class="fn">result</span>();
+
+<span class="kw">const</span> withAcl = <span class="kw">await</span> smb
+  .<span class="fn">listDirectory</span>(<span class="str">'/'</span>, { <span class="prop">includeSecurityDescriptor</span>: <span class="kw">true</span> })
+  .<span class="fn">result</span>();
+<span class="kw">const</span> dacl = withAcl[<span class="num">0</span>]?.securityDescriptor?.dacl;</pre>
             </div>
+            <h4>Streaming entries</h4>
+            <p>Large folders can render before the scan finishes:</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">stream.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">const</span> task = smb.<span class="fn">listDirectory</span>(<span class="str">'/Media'</span>);
+<span class="kw">const</span> unsubscribe = task.<span class="fn">subscribeEntries</span>((batch) =&gt; {
+  <span class="fn">setFiles</span>((prev) =&gt; prev.<span class="fn">concat</span>(batch));
+});
+<span class="kw">try</span> {
+  <span class="kw">await</span> task.<span class="fn">wait</span>(); <span class="cmt">// or `await task.result()` for the complete array</span>
+} <span class="kw">finally</span> {
+  <span class="fn">unsubscribe</span>();
+}</pre>
+            </div>
+            <ul>
+              <li>Every streamed entry is final: folders already carry <code>childCount</code>, and <code>securityDescriptor</code> is set when requested.</li>
+              <li>A batch goes out once <code>batchSize</code> entries are ready or 100 ms after the previous one; the first batch goes out as soon as anything is ready. A batch holds every entry ready at that moment, so it can be larger than <code>batchSize</code>.</li>
+              <li>Subscribing late loses nothing: the first callback replays every entry emitted so far.</li>
+              <li>Entries arrive in server order; sort in the UI if you need a stable order.</li>
+              <li>If the task fails or is cancelled, the entries already received are an incomplete listing.</li>
+              <li>With a non-zero <code>maxDepth</code>, a top-level entry is emitted once its whole subtree is listed, with its complete <code>children</code>. Since entries keep server order, a large folder near the start delays every entry after it.</li>
+            </ul>
           </div>
         </div>
 
-        <div class="method-card" data-searchable="getPathInfo file info metadata stat">
+        <div class="method-card" data-searchable="getPathInfo file info metadata stat securityDescriptor">
           <div class="method-card__header">
             <div>
               <div class="method-card__name">getPathInfo</div>
@@ -233,11 +258,14 @@ shares.<span class="fn">forEach</span>((s) => console.<span class="fn">log</span
             </div>
           </div>
           <div class="method-card__body">
-            <p class="method-card__desc">Get metadata for a single file or directory.</p>
+            <p class="method-card__desc">Get metadata for a single file or directory, including its security descriptor. Links resolve to their target, and <code>/</code> is the share root. Folders get <code>childCount</code> but never <code>children</code> — use <code>listDirectory</code> for their contents. The SD is omitted only when access to it is denied; any other SD failure fails the task.</p>
             <div class="docs-code">
               <div class="docs-code__header"><span class="docs-code__filename">info.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
               <pre><span class="kw">const</span> info = <span class="kw">await</span> smb.<span class="fn">getPathInfo</span>(<span class="str">'/document.pdf'</span>).<span class="fn">result</span>();
-console.<span class="fn">log</span>(info.size, info.modifiedAt);</pre>
+console.<span class="fn">log</span>(info.size, info.modifiedAt);
+
+<span class="kw">const</span> folder = <span class="kw">await</span> smb.<span class="fn">getPathInfo</span>(<span class="str">'/Media'</span>).<span class="fn">result</span>();
+console.<span class="fn">log</span>(folder.childCount);</pre>
             </div>
           </div>
         </div>
@@ -323,7 +351,7 @@ task.<span class="fn">subscribe</span>((s) => console.<span class="fn">log</span
             </div>
           </div>
           <div class="method-card__body">
-            <p class="method-card__desc">Delete a file or directory. Directories are removed recursively.</p>
+            <p class="method-card__desc">Delete a file or directory. Directories are removed recursively, with up to 16 requests in flight; the task fails on the first item that can't be deleted.</p>
             <div class="docs-code">
               <div class="docs-code__header"><span class="docs-code__filename">delete.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
               <pre><span class="kw">await</span> smb.<span class="fn">deleteItem</span>(<span class="str">'/old-backup'</span>).<span class="fn">result</span>();</pre>
@@ -383,7 +411,7 @@ task.<span class="fn">subscribe</span>((s) => console.<span class="fn">log</span
             </div>
           </div>
           <div class="method-card__body">
-            <p class="method-card__desc">Copy a file or directory. Set <code>recursive: true</code> for directories.</p>
+            <p class="method-card__desc">Copy a file or directory. Set <code>recursive: true</code> for directories. File data is copied inside the server when it supports server-side copy, otherwise through the device. Recursive copies copy up to 8 files at once and fail on the first failure; files in progress are removed, finished files stay.</p>
             <div class="docs-code">
               <div class="docs-code__header"><span class="docs-code__filename">copy.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
               <pre><span class="kw">await</span> smb.<span class="fn">copyItem</span>(<span class="str">'/templates'</span>, <span class="str">'/backup/templates'</span>, <span class="kw">true</span>).<span class="fn">result</span>();</pre>
@@ -403,7 +431,7 @@ task.<span class="fn">subscribe</span>((s) => console.<span class="fn">log</span
             </div>
           </div>
           <div class="method-card__body">
-            <p class="method-card__desc">Duplicate a file or folder in place. Returns the new path.</p>
+            <p class="method-card__desc">Duplicate a file or folder in place, using server-side copy when available. Returns the new path.</p>
             <div class="docs-code">
               <div class="docs-code__header"><span class="docs-code__filename">duplicate.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
               <pre><span class="kw">const</span> newPath = <span class="kw">await</span> smb.<span class="fn">duplicateItem</span>(<span class="str">'/report.pdf'</span>).<span class="fn">result</span>();
@@ -473,20 +501,53 @@ smb.<span class="fn">unsubscribePoolInfo</span>(id);</pre>
           </div>
         </div>
 
-        <div class="method-card" data-searchable="resetPool dispose lifecycle teardown">
+        <div class="method-card" data-searchable="resetPool reset slots recovery">
           <div class="method-card__header">
             <div>
-              <div class="method-card__name">resetPool / dispose</div>
-              <div class="method-card__sig">resetPool(): void · dispose(): void</div>
+              <div class="method-card__name">resetPool</div>
+              <div class="method-card__sig">resetPool(): void</div>
             </div>
             <div class="method-card__badges"><span class="method-badge method-badge--sync">sync</span></div>
           </div>
           <div class="method-card__body">
-            <p class="method-card__desc"><code>resetPool()</code> disconnects all slots. <code>dispose()</code> tears down the transfer store — call on logout.</p>
+            <p class="method-card__desc">Force-disconnect every pool slot and forget the cached configuration. Use for recovery when slots are stuck; connect again afterwards.</p>
             <div class="docs-code">
-              <div class="docs-code__header"><span class="docs-code__filename">lifecycle.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
-              <pre>smb.<span class="fn">resetPool</span>();
-smb.<span class="fn">dispose</span>();</pre>
+              <div class="docs-code__header"><span class="docs-code__filename">reset.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre>smb.<span class="fn">resetPool</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="cancelTransferTasks cancel transfers download upload copy duplicate">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">cancelTransferTasks</div>
+              <div class="method-card__sig">cancelTransferTasks(): void</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">sync</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Cancel every unsettled download, upload, copy, and duplicate task, including ones still waiting for a pool slot. Connection, listing, and mutation tasks are not affected.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">cancel.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre>smb.<span class="fn">cancelTransferTasks</span>();</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-card" data-searchable="destroy teardown logout lifecycle dispose">
+          <div class="method-card__header">
+            <div>
+              <div class="method-card__name">destroy</div>
+              <div class="method-card__sig">destroy(): Promise&lt;void&gt;</div>
+            </div>
+            <div class="method-card__badges"><span class="method-badge method-badge--sync">async</span></div>
+          </div>
+          <div class="method-card__body">
+            <p class="method-card__desc">Shut the client down: cancel tasks, disconnect the pool, wait for workers, and stop transfer tracking. The instance is not reusable — create a new one with <code>SMB()</code>.</p>
+            <div class="docs-code">
+              <div class="docs-code__header"><span class="docs-code__filename">logout.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+              <pre><span class="kw">await</span> smb.<span class="fn">destroy</span>();</pre>
             </div>
           </div>
         </div>
@@ -523,7 +584,7 @@ smb.<span class="fn">dispose</span>();</pre>
             <div class="method-card__badges"><span class="method-badge method-badge--sync">hook</span></div>
           </div>
           <div class="method-card__body">
-            <p class="method-card__desc">Power a transfer tray UI — all active download/upload/copy tasks in one array.</p>
+            <p class="method-card__desc">Power a transfer tray UI — active download/upload/copy tasks plus observed finished ones, until cleared or hidden.</p>
             <div class="docs-table-wrap"><table class="docs-table"><thead><tr><th>useTransferActions</th><th>Description</th></tr></thead><tbody>
               <tr><td><code>clearCompleted()</code></td><td>Remove finished transfers from tray</td></tr>
               <tr><td><code>hide(taskId)</code></td><td>Hide a specific transfer</td></tr>

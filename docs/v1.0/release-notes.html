@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    .doc-search:not(.doc-search--open),[data-doc-search]:not(.doc-search--open){display:none!important;visibility:hidden!important;pointer-events:none!important}
+    .nav__icon-btn svg,.nav__theme svg{width:18px;height:18px;max-width:none}
+    .doc-search__icon{width:20px;height:20px;max-width:none}
+  </style>
+  <script>try{var t=localStorage.getItem("docs-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Release notes — @cetapod/react-native-smb</title>
+  <link rel="icon" type="image/svg+xml" href="/react-native-smb/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-TBKdJ_kK.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-Bszxl6AG.js"></script>
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BMOZR0bK.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-ClZj_afx.css">
+</head>
+<body class="docs-body" data-docs-page="release-notes" data-docs-version="1.0">
+
+  <nav class="nav" data-site-nav></nav>
+
+
+  <div class="docs-overlay" data-docs-overlay></div>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav class="docs-nav" data-docs-nav></nav>
+    </aside>
+
+    <div class="docs-body-wrap">
+      <div class="docs-main">
+
+      <article class="docs-content">
+        <h1>Release notes</h1>
+        <p class="docs-lead">
+          Changes in each 1.0 release, newest first.
+        </p>
+
+        <h2 id="v1-0-4">1.0.4</h2>
+        <p class="docs-release-date">October 8, 2026</p>
+        <h3>Fixes</h3>
+        <ul>
+          <li>
+            <code>SmbTask.subscribe()</code> now delivers the final state to every listener. Before,
+            only the first listener received it, so later ones — including <code>task.result()</code> —
+            could wait forever after the task had finished.
+          </li>
+          <li>The transfer store no longer notifies listeners when nothing changed.</li>
+        </ul>
+
+        <h2 id="v1-0-3">1.0.3</h2>
+        <p class="docs-release-date">September 15, 2026</p>
+        <h3>Breaking changes</h3>
+        <ul>
+          <li><code>SmbShareList</code> is renamed to <code>SmbShare</code>.</li>
+          <li>
+            <code>dispose()</code> is replaced by the async <code>destroy()</code>, which cancels tasks,
+            disconnects the pool, and stops transfer tracking. The client can't be reused afterwards.
+          </li>
+        </ul>
+        <div class="docs-code">
+          <div class="docs-code__header"><span class="docs-code__filename">migrate.ts</span><button class="docs-code__copy" data-copy-code>Copy</button></div>
+          <pre><span class="cmt">// before</span>
+smb.<span class="fn">dispose</span>();
+
+<span class="cmt">// after</span>
+<span class="kw">await</span> smb.<span class="fn">destroy</span>();</pre>
+        </div>
+        <h3>New</h3>
+        <ul>
+          <li>
+            <code>SmbError.AuthenticationFailed</code> (203) for rejected credentials, logon, and account
+            problems — previously reported as <code>AccessDenied</code>.
+          </li>
+          <li>
+            <code>cancelTransferTasks()</code> cancels every unsettled download, upload, copy, and
+            duplicate task.
+          </li>
+          <li>Every failure is reported as a typed <code>SmbError</code> (transport, timeout, authentication, and server status errors).</li>
+        </ul>
+        <h3>Fixes</h3>
+        <ul>
+          <li>Recursive operations fail on the first error instead of returning partial results.</li>
+          <li>Downloads and uploads write to a temporary file next to the destination and replace it only when complete; failed transfers leave no partial file.</li>
+          <li>Connecting and disconnecting no longer block other work.</li>
+          <li>More reliable cancellation and task completion; tasks waiting for a pool slot can be cancelled.</li>
+          <li>Task and transfer state never moves back to an older snapshot, and bursts of transfer updates are combined to keep the UI responsive.</li>
+        </ul>
+
+        <h2 id="v1-0-2">1.0.2</h2>
+        <p class="docs-release-date">August 25, 2026</p>
+        <h3>New</h3>
+        <ul>
+          <li>
+            <code>listDirectory</code> and <code>getPathInfo</code> can return each item's security
+            descriptor (<code>includeSecurityDescriptor</code>, <code>SmbFileInfo.securityDescriptor</code>).
+          </li>
+        </ul>
+        <h3>Performance</h3>
+        <ul>
+          <li>Recursive listings scan subfolders in parallel.</li>
+          <li>The connection pool adds slots on demand for work other than connecting.</li>
+        </ul>
+
+        <h2 id="v1-0-1">1.0.1</h2>
+        <p class="docs-release-date">July 21, 2026</p>
+        <h3>Other</h3>
+        <ul>
+          <li>Improved npm package metadata.</li>
+        </ul>
+
+        <h2 id="v1-0-0">1.0.0</h2>
+        <p class="docs-release-date">July 17, 2026</p>
+        <p>Initial release.</p>
+
+        <nav class="docs-pager">
+          <a href="/react-native-smb/docs/v1.0/architecture.html" class="docs-pager__link">
+            <div class="docs-pager__label">Previous</div>
+            <div class="docs-pager__title">Architecture</div>
+          </a>
+          <a href="/react-native-smb/" class="docs-pager__link docs-pager__link--next">
+            <div class="docs-pager__label">Next</div>
+            <div class="docs-pager__title">Back to home</div>
+          </a>
+        </nav>
+      </article>
+    </div>
+      <aside class="docs-rail" data-docs-toc-right aria-label="Page contents"></aside>
+    </div>
+  </div>
+
+  <div data-site-footer></div>
+
+</body>
+</html>

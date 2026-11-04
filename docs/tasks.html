@@ -14,12 +14,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-B69vWf4d.js"></script>
-  <script type="module" crossorigin src="/react-native-smb/assets/docs-C6cW2HzL.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-TBKdJ_kK.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-Bszxl6AG.js"></script>
   <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BMOZR0bK.css">
-  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-ClZj_afx.css">
 </head>
-<body class="docs-body" data-docs-page="tasks">
+<body class="docs-body" data-docs-page="tasks" data-docs-version="1.1">
 
   <nav class="nav" data-site-nav></nav>
 
@@ -48,6 +48,7 @@
             <thead><tr><th>Action</th><th>When</th><th>API</th></tr></thead>
             <tbody>
               <tr><td>Get result</td><td>You need the return value</td><td><code>await task.result()</code></td></tr>
+              <tr><td>Wait</td><td>Completion only</td><td><code>await task.wait()</code></td></tr>
               <tr><td>Watch progress</td><td>UI needs live updates</td><td><code>task.subscribe()</code> or <code>useSubscribe</code></td></tr>
               <tr><td>Cancel</td><td>User aborts</td><td><code>task.cancel()</code></td></tr>
             </tbody>
@@ -62,7 +63,7 @@
           </div>
           <pre><span class="kw">await</span> smb.<span class="fn">connect</span>(<span class="str">'smb://192.168.1.100/Share'</span>, creds).<span class="fn">result</span>();
 
-<span class="kw">const</span> files = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/'</span>, <span class="kw">false</span>, <span class="num">-1</span>).<span class="fn">result</span>();
+<span class="kw">const</span> files = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/'</span>).<span class="fn">result</span>();
 <span class="kw">await</span> smb.<span class="fn">downloadFile</span>(<span class="str">'/doc.pdf'</span>, <span class="str">'/local/doc.pdf'</span>).<span class="fn">result</span>();</pre>
         </div>
         <p>Hold the handle and await later:</p>
@@ -166,6 +167,27 @@ useEffect(() => <span class="fn">subscribe</span>((snap) => console.<span class=
           </table>
         </div>
 
+        <h2 id="stream-entries">Stream listing entries</h2>
+        <p>
+          <code>listDirectory</code> returns an <code>SmbListTask</code>. Besides status snapshots, a listing
+          pushes batches of top-level entries through a separate channel — no <code>progress</code> is involved:
+        </p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">stream.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre><span class="kw">const</span> task = smb.<span class="fn">listDirectory</span>(<span class="str">'/Media'</span>);
+<span class="kw">const</span> unsub = task.<span class="fn">subscribeEntries</span>((batch) =&gt; <span class="fn">append</span>(batch));
+<span class="kw">await</span> task.<span class="fn">wait</span>(); <span class="cmt">// completion without converting the full result again</span>
+<span class="fn">unsub</span>();</pre>
+        </div>
+        <p>
+          <code>subscribeEntries</code> replays the entries emitted before the call, so it can be attached at
+          any time. All batches are delivered before the task's final status. <code>result()</code> still
+          resolves with the complete array.
+        </p>
+
         <h2 id="cancel">Cancel</h2>
         <div class="docs-code">
           <div class="docs-code__header">
@@ -207,7 +229,7 @@ unsub();</pre>
   <span class="kw">const</span> tasks = <span class="fn">useTransfers</span>(smb);
   <span class="kw">const</span> { clearCompleted, hide } = <span class="fn">useTransferActions</span>(smb);
 
-  <span class="cmt">// tasks is SmbTaskState[] — all active transfers</span>
+  <span class="cmt">// active transfers plus observed finished ones, until cleared or hidden</span>
 }</pre>
         </div>
         <p>See the example app's <code>TransferTrayPanel</code> for a complete implementation.</p>
@@ -226,19 +248,30 @@ unsub();</pre>
   <span class="kw">if</span> (error <span class="kw">instanceof</span> SmbTaskError) {
     <span class="kw">if</span> (error.code === SmbError.NotFound) { <span class="cmt">/* ... */</span> }
     <span class="kw">if</span> (error.code === SmbError.AccessDenied) { <span class="cmt">/* ... */</span> }
+    <span class="kw">if</span> (error.code === SmbError.AuthenticationFailed) { <span class="cmt">/* prompt for credentials */</span> }
+    <span class="kw">if</span> (error.code === SmbError.NotConnected || error.code === SmbError.TimedOut) { <span class="cmt">/* reconnect / retry */</span> }
   }
 }</pre>
         </div>
+        <p><code>SmbTaskError</code> carries <code>code</code> and an optional <code>taskId</code>. A task reports the first error that caused it to fail; it reports cancellation only when the cancel came before any other failure. Nested listings, copies, duplicates, and deletes fail on the first failing item instead of returning partial results.</p>
         <p>See <a href="/react-native-smb/docs/types.html#smb-error">SmbError</a> for all error codes.</p>
 
         <h2 id="lifecycle">Lifecycle</h2>
-        <p>When the user logs out or you're done with a client, call <code>dispose()</code>:</p>
+        <p>To stop transfer tray subscriptions without closing the SMB session, stop the transfer store. This clears the local tray state; a later subscription restores transfers the native client still holds:</p>
+        <div class="docs-code">
+          <div class="docs-code__header">
+            <span class="docs-code__filename">tray.ts</span>
+            <button class="docs-code__copy" data-copy-code>Copy</button>
+          </div>
+          <pre>smb.<span class="fn">transferStore</span>().<span class="fn">stop</span>();</pre>
+        </div>
+        <p>When the user logs out or you're done with a client, shut it down completely. The instance can't be reused afterwards — create a new one with <code>SMB()</code>:</p>
         <div class="docs-code">
           <div class="docs-code__header">
             <span class="docs-code__filename">lifecycle.ts</span>
             <button class="docs-code__copy" data-copy-code>Copy</button>
           </div>
-          <pre>smb.<span class="fn">dispose</span>(); <span class="cmt">// stops transfer store listener</span></pre>
+          <pre><span class="kw">await</span> smb.<span class="fn">destroy</span>();</pre>
         </div>
         <p>Sync state checks (<code>isConnected</code>, <code>isInitialized</code>) are available anytime without a task.</p>
 

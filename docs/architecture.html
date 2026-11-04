@@ -14,12 +14,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-B69vWf4d.js"></script>
-  <script type="module" crossorigin src="/react-native-smb/assets/docs-C6cW2HzL.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-TBKdJ_kK.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-Bszxl6AG.js"></script>
   <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BMOZR0bK.css">
-  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-ClZj_afx.css">
 </head>
-<body class="docs-body" data-docs-page="architecture">
+<body class="docs-body" data-docs-page="architecture" data-docs-version="1.1">
 
   <nav class="nav" data-site-nav></nav>
 
@@ -37,8 +37,8 @@
       <article class="docs-content">
         <h1>Architecture</h1>
         <p class="docs-lead">
-          Parallelism at two levels — across tasks via the connection pool,
-          within transfers via chunk pipelining on a single SMB session.
+          Parallelism at two levels — across tasks via the connection pool, and within one task
+          by pipelining requests on a single SMB session: file chunks, directory walks, and tree operations.
         </p>
 
         <h2 id="pool">Connection pool</h2>
@@ -110,11 +110,11 @@
             <tbody>
               <tr>
                 <td><code>Interactive</code></td>
-                <td><code>getPathInfo</code>, shallow <code>listDirectory</code>, <code>moveItem</code>, <code>renameItem</code>, <code>createDirectory</code>, <code>getSecurityDescriptor</code>, <code>listShares</code></td>
+                <td><code>getPathInfo</code>, <code>listDirectory</code> (<code>maxDepth: 0</code>), <code>moveItem</code>, <code>renameItem</code>, <code>createDirectory</code>, <code>getSecurityDescriptor</code>, <code>listShares</code></td>
               </tr>
               <tr>
                 <td><code>Metadata</code></td>
-                <td><code>downloadFile</code>, <code>uploadFile</code>, <code>copyItem</code>, <code>duplicateItem</code>, <code>deleteItem</code>, recursive <code>listDirectory</code></td>
+                <td><code>downloadFile</code>, <code>uploadFile</code>, <code>copyItem</code>, <code>duplicateItem</code>, <code>deleteItem</code>, <code>listDirectory</code> (<code>maxDepth</code> ≠ 0)</td>
               </tr>
             </tbody>
           </table>
@@ -152,6 +152,88 @@
           Same connection, same session — credit-based pipelining, separate from slot assignment.
         </p>
 
+        <h2 id="server-side-copy">Server-side copy</h2>
+        <p>
+          <code>copyItem</code> and <code>duplicateItem</code> copy file data inside the server, so it never
+          crosses the client's network link:
+        </p>
+        <div class="docs-code">
+          <div class="docs-code__header"><span class="docs-code__filename">copy flow</span></div>
+          <pre>open source, create destination
+→ FSCTL_SRV_REQUEST_RESUME_KEY on the source        <span class="cmt">24-byte key</span>
+→ FSCTL_SRV_COPYCHUNK_WRITE on the destination      <span class="cmt">up to 4 in flight, 16 × 1 MiB chunks each</span>
+→ fsync, close</pre>
+        </div>
+        <ul>
+          <li>Each request stays within the protocol's default server limits (256 chunks, 1 MiB each, 16 MiB total). Progress advances per completed request.</li>
+          <li>
+            If the server rejects the copy before any data has moved (<code>NOT_SUPPORTED</code>,
+            <code>INVALID_DEVICE_REQUEST</code>, <code>NOT_IMPLEMENTED</code>, <code>INVALID_PARAMETER</code>),
+            the file is copied through the client with pipelined READ/WRITE instead. The rejection is
+            remembered for the server and share, shared by every pool slot, so it is probed only once.
+          </li>
+          <li>A failure after data started moving fails the copy; the partial destination is deleted, as with the client copy.</li>
+          <li>Server-side copy only works within one share, which every pool slot uses.</li>
+        </ul>
+
+        <h2 id="tree-operations">Pipelined tree operations</h2>
+        <p>
+          Recursive delete and copy send one small request per file or folder. Several of them stay in
+          flight on one slot, and each completion may start follow-up requests, which keeps the required
+          order. The first failure or a cancel stops new requests, drains the ones in flight, and still
+          runs cleanup (closing handles, removing partial files).
+        </p>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Operation</th><th>In flight</th><th>Ordering</th></tr></thead>
+            <tbody>
+              <tr><td><code>deleteItem</code></td><td>16 requests</td><td>Files and empty folders at once; a folder once its contents are gone; the root folder last</td></tr>
+              <tr><td>Copy: folders</td><td>16 requests</td><td>A folder once its parent exists</td></tr>
+              <tr><td>Copy: files</td><td>8 files</td><td>Each file runs open → stat → resume key → COPYCHUNK_WRITE → fsync → close as its own chain</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A recursive copy sends its first non-empty file alone to find out whether the server supports
+          server-side copy. If it does, the remaining files are copied 8 at a time; if not, they are copied
+          through the client one after another. Files in progress when a copy fails or is cancelled are
+          removed; finished files stay.
+        </p>
+
+        <h2 id="listing">Listing pipeline</h2>
+        <p>
+          <code>listDirectory</code> reads directories with raw <code>QUERY_DIRECTORY</code> requests on one
+          slot — Interactive for <code>maxDepth: 0</code>, Metadata for nested listings — and decodes each
+          reply as it arrives, instead of reading the whole directory before returning:
+        </p>
+        <div class="docs-code">
+          <div class="docs-code__header"><span class="docs-code__filename">listing flow</span></div>
+          <pre>[CREATE + QUERY_DIRECTORY] → QUERY_DIRECTORY … → CLOSE       <span class="cmt">decode each reply as it arrives</span>
+   └ directory within maxDepth: same chain, decoded          <span class="cmt">expand into children</span>
+   └ directory at the limit:    same chain, counted          <span class="cmt">childCount</span>
+   └ per entry (opt-in):        CREATE + QUERY_INFO + CLOSE  <span class="cmt">security descriptor</span></pre>
+        </div>
+        <p>
+          Lookups share one connection: up to 16 directory queries and, separately, up to 32
+          security-descriptor queries in flight. Lookups start in top-level order, and directory queries go
+          on the wire before security descriptors. An entry is ready once its lookups finish — for an
+          expanded directory, also all of its children, whose count becomes <code>childCount</code> without
+          another query, so each directory is opened once. Ready top-level entries are emitted in server
+          order through <code>subscribeEntries</code>.
+        </p>
+        <p>The same engine backs every other directory walk:</p>
+        <div class="docs-table-wrap">
+          <table class="docs-table">
+            <thead><tr><th>Caller</th><th>Listing</th></tr></thead>
+            <tbody>
+              <tr><td><code>deleteItem</code></td><td>Whole tree once, then pipelined deletes</td></tr>
+              <tr><td><code>copyItem</code>, <code>duplicateItem</code></td><td>Whole source tree once; total size and copy plan come from it</td></tr>
+              <tr><td><code>duplicateItem</code> naming</td><td>Parent filtered by the server to <code>"&lt;base&gt; copy*"</code></td></tr>
+              <tr><td><code>getPathInfo</code></td><td>None for files (stat and SD query run together); folders read their own entries once for <code>childCount</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <h2 id="diagnostics">Diagnostics</h2>
         <div class="docs-code">
           <div class="docs-code__header">
@@ -180,9 +262,9 @@ smb.<span class="fn">unsubscribePoolInfo</span>(id);</pre>
             <div class="docs-pager__label">Previous</div>
             <div class="docs-pager__title">Types & enums</div>
           </a>
-          <a href="/react-native-smb/" class="docs-pager__link docs-pager__link--next">
+          <a href="/react-native-smb/docs/release-notes.html" class="docs-pager__link docs-pager__link--next">
             <div class="docs-pager__label">Next</div>
-            <div class="docs-pager__title">Back to home</div>
+            <div class="docs-pager__title">Release notes</div>
           </a>
         </nav>
       </article>

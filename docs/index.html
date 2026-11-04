@@ -15,12 +15,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-B69vWf4d.js"></script>
-  <script type="module" crossorigin src="/react-native-smb/assets/docs-C6cW2HzL.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/site-footer-TBKdJ_kK.js"></script>
+  <script type="module" crossorigin src="/react-native-smb/assets/docs-Bszxl6AG.js"></script>
   <link rel="stylesheet" crossorigin href="/react-native-smb/assets/site-footer-BMOZR0bK.css">
-  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-BLOYA6XH.css">
+  <link rel="stylesheet" crossorigin href="/react-native-smb/assets/docs-ClZj_afx.css">
 </head>
-<body class="docs-body" data-docs-page="start">
+<body class="docs-body" data-docs-page="start" data-docs-version="1.1">
 
   <nav class="nav" data-site-nav></nav>
 
@@ -51,7 +51,8 @@
         <p>Key capabilities:</p>
         <ul>
           <li>Connect, list shares, browse directories, upload/download files</li>
-          <li>Create, delete, move, rename, copy, duplicate items</li>
+          <li>Streaming directory listings — large folders render while the scan runs</li>
+          <li>Create, delete, move, rename, copy, duplicate items, with server-side copy when the server supports it</li>
           <li>Read Windows ACL / security descriptors</li>
           <li>4-slot connection pool with interactive-priority scheduling</li>
           <li>React hooks for task subscriptions and transfer trays</li>
@@ -109,9 +110,7 @@ cd ios && pod install</pre>
 console.<span class="fn">log</span>(info.share); <span class="cmt">// "Media"</span>
 
 <span class="cmt">// List root directory</span>
-<span class="kw">const</span> entries = <span class="kw">await</span> smb
-  .<span class="fn">listDirectory</span>(<span class="str">'/'</span>, <span class="kw">false</span>)
-  .<span class="fn">result</span>();
+<span class="kw">const</span> entries = <span class="kw">await</span> smb.<span class="fn">listDirectory</span>(<span class="str">'/'</span>).<span class="fn">result</span>();
 
 <span class="cmt">// Download with progress</span>
 <span class="kw">const</span> task = smb.<span class="fn">downloadFile</span>(
@@ -136,16 +135,17 @@ task.<span class="fn">subscribe</span>((snap) => console.<span class="fn">log</s
           <div class="docs-code__header">
             <span class="docs-code__filename">SMB URL</span>
           </div>
-          <pre>smb://[&lt;domain;&gt;][&lt;username&gt;@]&lt;host&gt;[:&lt;port&gt;]/&lt;share&gt;/&lt;path&gt;</pre>
+          <pre>smb://&lt;host&gt;[:&lt;port&gt;]            <span class="cmt">// initialize</span>
+smb://&lt;host&gt;[:&lt;port&gt;]/&lt;share&gt;    <span class="cmt">// connect</span></pre>
         </div>
+        <p>Pass the username and password in <code>SmbCredentials</code>, and directory and file paths to the filesystem methods.</p>
         <div class="docs-table-wrap">
           <table class="docs-table">
             <thead><tr><th>Example</th><th>Description</th></tr></thead>
             <tbody>
+              <tr><td><code>smb://nas.local</code></td><td>Server only, for <code>initialize</code></td></tr>
               <tr><td><code>smb://nas.local/Photos</code></td><td>Connect to share <code>Photos</code> on <code>nas.local</code></td></tr>
-              <tr><td><code>smb://user@192.168.1.100/Documents</code></td><td>Username in URL (password via creds)</td></tr>
-              <tr><td><code>smb://WORKGROUP;admin@server/Share</code></td><td>Domain + username</td></tr>
-              <tr><td><code>smb://192.168.1.100:445/Media/video.mp4</code></td><td>Custom port and path</td></tr>
+              <tr><td><code>smb://192.168.1.100:445/Media</code></td><td>Custom port</td></tr>
             </tbody>
           </table>
         </div>
