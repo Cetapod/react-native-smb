@@ -34,15 +34,23 @@ function entry(name: string): SmbFileInfo {
   };
 }
 
-/** Mirrors the native EntryStream: replays on subscribe, then delivers live batches. */
+type EntrySubscriber = {
+  signal: () => void;
+  cursor: number;
+  scheduled: boolean;
+};
+
+/** Mirrors native EntryStream notify-and-drain delivery. */
 class FakeNativeListTask implements NativeSmbListTask {
   current: Record<string, string>;
   readonly listeners = new Map<string, (raw: Record<string, string>) => void>();
-  readonly entryListeners = new Map<string, (entries: SmbFileInfo[]) => void>();
+  readonly entrySubscribers = new Map<string, EntrySubscriber>();
   readonly unsubscribedEntries: string[] = [];
   readonly emitted: SmbFileInfo[] = [];
+  readonly pendingSignals: Array<() => void> = [];
   resultReads = 0;
   private nextId = 1;
+  private deferSignals = false;
 
   constructor(current: Record<string, string>) {
     this.current = current;
@@ -69,21 +77,44 @@ class FakeNativeListTask implements NativeSmbListTask {
     return [...this.emitted];
   }
 
-  subscribeEntries(listener: (entries: SmbFileInfo[]) => void): string {
+  subscribeEntries(listener: () => void): string {
     const id = `ent-${this.nextId++}`;
-    if (this.emitted.length > 0) listener([...this.emitted]);
-    this.entryListeners.set(id, listener);
+    this.entrySubscribers.set(id, { signal: listener, cursor: 0, scheduled: false });
     return id;
   }
 
   unsubscribeEntries(subscriptionId: string): void {
     this.unsubscribedEntries.push(subscriptionId);
-    this.entryListeners.delete(subscriptionId);
+    this.entrySubscribers.delete(subscriptionId);
+  }
+
+  drainEntries(subscriptionId: string): SmbFileInfo[] {
+    const sub = this.entrySubscribers.get(subscriptionId);
+    if (!sub) return [];
+    const out = this.emitted.slice(sub.cursor);
+    sub.cursor = this.emitted.length;
+    sub.scheduled = false;
+    return out;
+  }
+
+  /** When true, signals queue until {@link flushSignals}; otherwise they run immediately. */
+  setDeferSignals(defer: boolean): void {
+    this.deferSignals = defer;
+  }
+
+  flushSignals(): void {
+    const queued = this.pendingSignals.splice(0);
+    for (const signal of queued) signal();
   }
 
   emitEntries(batch: SmbFileInfo[]): void {
-    for (const listener of this.entryListeners.values()) listener(batch);
     this.emitted.push(...batch);
+    for (const sub of this.entrySubscribers.values()) {
+      if (sub.scheduled) continue;
+      sub.scheduled = true;
+      if (this.deferSignals) this.pendingSignals.push(sub.signal);
+      else sub.signal();
+    }
   }
 
   emit(next: Record<string, string>): void {
@@ -104,7 +135,10 @@ describe('SmbListTask.subscribeEntries', () => {
     native.emitEntries([entry('a'), entry('b')]);
     native.emitEntries([entry('c')]);
 
-    expect(names(batches)).toEqual([['a', 'b'], ['c']]);
+    expect(names(batches)).toEqual([
+      ['a', 'b'],
+      ['c'],
+    ]);
   });
 
   it('replays earlier entries to late subscribers', () => {
@@ -117,7 +151,10 @@ describe('SmbListTask.subscribeEntries', () => {
     task.subscribeEntries((batch) => batches.push(batch));
     native.emitEntries([entry('c')]);
 
-    expect(names(batches)).toEqual([['a', 'b'], ['c']]);
+    expect(names(batches)).toEqual([
+      ['a', 'b'],
+      ['c'],
+    ]);
   });
 
   it('fans out to independent subscribers', () => {
@@ -148,6 +185,57 @@ describe('SmbListTask.subscribeEntries', () => {
 
     expect(batches).toEqual([]);
     expect(native.unsubscribedEntries).toEqual(['ent-1']);
+  });
+
+  it('merges several appends behind one pending signal into a single batch', () => {
+    const native = new FakeNativeListTask(snapshot(TaskStatus.Running));
+    native.setDeferSignals(true);
+    const task = new SmbListTask('task-1', native);
+    const batches: SmbFileInfo[][] = [];
+
+    task.subscribeEntries((batch) => batches.push(batch));
+    native.emitEntries([entry('a')]);
+    native.emitEntries([entry('b')]);
+    native.emitEntries([entry('c')]);
+
+    expect(batches).toEqual([]);
+    expect(native.pendingSignals).toHaveLength(1);
+
+    native.flushSignals();
+
+    expect(names(batches)).toEqual([['a', 'b', 'c']]);
+  });
+
+  it('ignores signals that arrive after unsubscribe', () => {
+    const native = new FakeNativeListTask(snapshot(TaskStatus.Running));
+    native.setDeferSignals(true);
+    const task = new SmbListTask('task-1', native);
+    const batches: SmbFileInfo[][] = [];
+
+    const unsubscribe = task.subscribeEntries((batch) => batches.push(batch));
+    native.emitEntries([entry('a')]);
+    unsubscribe();
+    native.flushSignals();
+
+    expect(batches).toEqual([]);
+  });
+
+  it('drains the last entries before the terminal status settles', async () => {
+    const native = new FakeNativeListTask(snapshot(TaskStatus.Running));
+    native.setDeferSignals(true);
+    const task = new SmbListTask('task-1', native);
+    const batches: SmbFileInfo[][] = [];
+
+    task.subscribeEntries((batch) => batches.push(batch));
+    native.emitEntries([entry('a')]);
+    native.emitEntries([entry('b')]);
+
+    const done = task.wait();
+    native.flushSignals();
+    native.emit(snapshot(TaskStatus.Success));
+
+    await expect(done).resolves.toBeUndefined();
+    expect(names(batches)).toEqual([['a', 'b']]);
   });
 });
 

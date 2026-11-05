@@ -79,9 +79,10 @@ export class SmbClient {
 
   /**
    * List a directory. Top-level entries also stream via
-   * {@link SmbListTask.subscribeEntries}: a batch is pushed once `batchSize`
-   * entries are ready or 100 ms have passed (the first batch goes out immediately).
-   * With a non-zero `maxDepth`, each streamed entry carries its complete subtree.
+   * {@link SmbListTask.subscribeEntries}. `batchSize` and the 100 ms delay control
+   * native flushes (the first flush goes out immediately); JS may receive several
+   * flushes as one coalesced batch while the thread is busy. With a non-zero
+   * `maxDepth`, each streamed entry carries its complete subtree.
    */
   listDirectory(path: string, options: ListDirectoryOptions = {}): SmbListTask {
     const { maxDepth = 0, includeSecurityDescriptor = false, batchSize = DEFAULT_LIST_BATCH_SIZE } = options;

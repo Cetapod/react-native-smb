@@ -87,7 +87,8 @@ try {
 ```
 
 - Every streamed entry is final: directories already carry `childCount`, and `securityDescriptor` is set when requested.
-- A batch is pushed once `batchSize` entries are ready or 100 ms after the previous batch; the first batch goes out as soon as anything is ready. A batch contains every entry ready at that moment, so it can be larger than `batchSize`.
+- Native flushes when `batchSize` entries are ready or 100 ms after the previous flush (the first flush goes out as soon as anything is ready). Each flush takes every entry ready at that moment, so it can be larger than `batchSize`.
+- Delivery to JS is notify-and-drain: a busy JS thread coalesces several native flushes into one `subscribeEntries` callback.
 - Subscribing late loses nothing: the first callback replays every entry emitted so far.
 - Entries arrive in server order. Sort in the UI if you need a stable order.
 - If the task fails or is cancelled, entries already received are an incomplete listing.
@@ -126,7 +127,7 @@ See [Connection pool](./ARCHITECTURE.md).
 
 | Member | Description |
 | ------ | ----------- |
-| `subscribeEntries(listener)` | Receive entry batches (replays earlier ones first); returns unsubscribe |
+| `subscribeEntries(listener)` | Receive entry batches (replays earlier ones first; coalesces while JS is busy); returns unsubscribe |
 
 ### Errors
 

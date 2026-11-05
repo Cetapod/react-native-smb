@@ -94,7 +94,7 @@ function DownloadBar({ task }) {
 
 ## Stream listing entries
 
-`listDirectory` returns an `SmbListTask`. Besides status snapshots, a listing pushes batches of top-level entries through a separate channel — no `progress` is involved:
+`listDirectory` returns an `SmbListTask`. Besides status snapshots, a listing delivers top-level entries through a separate channel — no `progress` is involved:
 
 ```typescript
 const task = smb.listDirectory('/Media');
@@ -103,7 +103,7 @@ await task.wait(); // completion without converting the full result again
 unsub();
 ```
 
-`subscribeEntries` replays the entries emitted before the call, so it can be attached at any time. All batches are delivered before the task's terminal status. `result()` still resolves with the complete array, so existing callers are unaffected.
+`subscribeEntries` replays the entries emitted before the call, so it can be attached at any time. Native flushes wake a payload-free signal; the JS wrapper drains every entry appended since the last wake, so a busy JS thread coalesces several flushes into one batch. All entry deliveries run before the task's terminal status. `result()` still resolves with the complete array, so existing callers are unaffected.
 
 ## Fire-and-forget
 
