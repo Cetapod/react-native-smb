@@ -138,6 +138,8 @@ std::string SmbTask::subscribeEntries(const EntriesListener& listener) {
 
 void SmbTask::unsubscribeEntries(const std::string& id) { entries_->unsubscribe(id); }
 
+std::vector<SmbFileInfo> SmbTask::drainEntries(const std::string& id) { return entries_->drain(id); }
+
 void SmbTask::loadHybridMethods() {
     HybridObject::loadHybridMethods();
     registerHybrids(this, [](Prototype& prototype) {
@@ -148,6 +150,7 @@ void SmbTask::loadHybridMethods() {
         prototype.registerHybridMethod("unsubscribe", &SmbTask::unsubscribe);
         prototype.registerHybridMethod("subscribeEntries", &SmbTask::subscribeEntries);
         prototype.registerHybridMethod("unsubscribeEntries", &SmbTask::unsubscribeEntries);
+        prototype.registerHybridMethod("drainEntries", &SmbTask::drainEntries);
         prototype.registerRawHybridMethod("getResultValue", 0, &SmbTask::getResultValueRaw);
     });
 }

@@ -173,7 +173,11 @@ export interface NativeSmbTask {
 }
 
 export interface NativeSmbListTask extends NativeSmbTask {
-  /** Replays entries emitted so far as one batch, then delivers each live batch. */
-  subscribeEntries(listener: (entries: SmbFileInfo[]) => void): string;
+  /**
+   * Payload-free wake for new entries. Call {@link drainEntries} to pull every
+   * entry appended since the last drain (including a late-subscribe replay).
+   */
+  subscribeEntries(listener: () => void): string;
   unsubscribeEntries(subscriptionId: string): void;
+  drainEntries(subscriptionId: string): SmbFileInfo[];
 }
