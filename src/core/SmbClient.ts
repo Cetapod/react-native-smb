@@ -3,6 +3,7 @@ import { shapePoolInfo } from '../bridge/decode';
 import type { ReactNativeSmb } from '../ReactNativeSmb';
 import type {
   ListDirectoryOptions,
+  NativeSmbListTask,
   NativeSmbTask,
   PoolInfo,
   SmbConnectionInfo,
@@ -27,9 +28,10 @@ export class SmbClient {
       native ?? NitroModules.createHybridObject<ReactNativeSmb>('ReactNativeSmb');
   }
 
-  private op<T>(call: (taskId: string) => NativeSmbTask): SmbTask<T> {
+  private op<T>(call: (taskId: string) => import('../specs/NativeSmbTask.nitro').NativeSmbTask): SmbTask<T> {
     const id = generateTaskId();
-    return new SmbTask<T>(id, call(id));
+    // getResultValue is a raw JSI method on HybridSmbTask, not in the Nitrogen spec.
+    return new SmbTask<T>(id, call(id) as NativeSmbTask);
   }
 
   transferStore(): TransferStore {
@@ -87,7 +89,11 @@ export class SmbClient {
   listDirectory(path: string, options: ListDirectoryOptions = {}): SmbListTask {
     const { maxDepth = 0, includeSecurityDescriptor = false, batchSize = DEFAULT_LIST_BATCH_SIZE } = options;
     const id = generateTaskId();
-    return new SmbListTask(id, this.native.listDirectory(id, path, maxDepth, includeSecurityDescriptor, batchSize));
+    // drainEntries is a raw JSI method on every HybridSmbTask; list ops use NativeSmbListTask.
+    return new SmbListTask(
+      id,
+      this.native.listDirectory(id, path, maxDepth, includeSecurityDescriptor, batchSize) as NativeSmbListTask,
+    );
   }
 
   getPathInfo(path: string): SmbTask<SmbFileInfo> {

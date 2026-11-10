@@ -3,7 +3,7 @@
 #include "OperatorBase.hpp"
 
 // For JSIConverter<T> in publishThisResult convenience.
-#include "../ReactNativeSmb.hpp"  // brings the JSIConverter specializations in margelo::nitro namespace
+#include "../core/SmbModels.hpp"
 
 namespace jsi = facebook::jsi;
 

@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "../../ReactNativeSmb.hpp"  // SmbFileInfo
+#include "../../core/SmbModels.hpp"
 #include "../../core/CancellationToken.hpp"
 #include "../../util/SmbErrorMapper.hpp"
 #include "../SmbSecurityQuery.hpp"

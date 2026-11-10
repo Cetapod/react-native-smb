@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ReactNativeSmb.hpp"
+#include "../core/SmbModels.hpp"
 #include "../util/SmbErrorMapper.hpp"
 #include "ServerCapabilities.hpp"
 

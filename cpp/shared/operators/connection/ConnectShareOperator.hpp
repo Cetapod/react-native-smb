@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "../../ReactNativeSmb.hpp"  // SmbConnectionInfo
+#include "../../core/SmbModels.hpp"
 #include "../Operator.hpp"
 
 namespace react_native_smb {

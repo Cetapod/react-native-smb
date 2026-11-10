@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <NitroModules/HybridObject.hpp>
 #include <jsi/jsi.h>
 
 #include "SmbTaskCore.hpp"
@@ -21,9 +20,8 @@ class EntryStream;
 struct SmbFileInfo;
 
 namespace jsi = facebook::jsi;
-using namespace margelo::nitro;
 
-class SmbTask : public HybridObject, public SmbTaskCore {
+class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask> {
    public:
     using EntriesListener = std::function<void()>;
 
@@ -41,7 +39,6 @@ class SmbTask : public HybridObject, public SmbTaskCore {
     std::string subscribeMap(const std::function<void(const std::unordered_map<std::string, std::string>&)>& listener);
     void unsubscribe(const std::string& id) { SmbTaskCore::unsubscribe(id); }
 
-    // Incremental listing entries via notify-and-drain (coalesced while JS is busy).
     std::string subscribeEntries(const EntriesListener& listener);
     void unsubscribeEntries(const std::string& id);
     std::vector<SmbFileInfo> drainEntries(const std::string& id);
@@ -49,15 +46,14 @@ class SmbTask : public HybridObject, public SmbTaskCore {
 
     std::future<void> result() { return completionFuture(); }
 
+    jsi::Value getResultValue(jsi::Runtime& runtime) const { return SmbTaskCore::getResultValue(runtime); }
+
    private:
-    jsi::Value getResultValueRaw(jsi::Runtime& runtime, const jsi::Value& thisValue, const jsi::Value* args, size_t count);
     std::weak_ptr<SmbConnectionPool> pool_;
     std::shared_ptr<EntryStream> entries_;
 
     void launchOp(size_t opIndex);
     size_t appendOps(std::vector<std::unique_ptr<OperatorBase>>& more);
-
-    void loadHybridMethods() override;
 };
 
 }  // namespace react_native_smb

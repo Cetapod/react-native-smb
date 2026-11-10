@@ -21,7 +21,7 @@ SMB client for React Native via [libsmb2](https://github.com/sahlberg/libsmb2) a
 | -------------------------- | -------------- |
 | React Native               | >= 0.76        |
 | React                      | >= 19          |
-| react-native-nitro-modules | >= 0.22, < 1.0 |
+| react-native-nitro-modules | * (peer; developed against 0.37.2) |
 | iOS                        | 12+            |
 | Android                    | not yet        |
 

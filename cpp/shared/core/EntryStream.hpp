@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "../ReactNativeSmb.hpp"  // SmbFileInfo
+#include "../core/SmbModels.hpp"
 
 namespace react_native_smb {
 

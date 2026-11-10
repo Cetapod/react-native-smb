@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-#include "../../ReactNativeSmb.hpp"  // SmbFileInfo + JSIConverter
+#include "../../core/SmbModels.hpp"
 #include "../../connection/SmbConnectionPool.hpp"
 #include "../../core/EntryStream.hpp"
 #include "../../io/listing/DirectoryLister.hpp"

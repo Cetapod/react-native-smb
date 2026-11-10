@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "../ReactNativeSmb.hpp"
+#include "../core/SmbModels.hpp"
 #include "../connection/MetadataContextLease.hpp"
 #include "../connection/SmbConnectionPool.hpp"
 #include "../core/CancellationToken.hpp"

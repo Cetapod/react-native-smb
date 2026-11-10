@@ -1,19 +1,13 @@
-export interface SmbCredentials {
-  readonly username: string;
-  readonly password: string;
-}
+import type { NativeSmbTask as NitroNativeSmbTask } from './specs/NativeSmbTask.nitro'
 
-export interface SmbShare {
-  readonly name: string;
-  readonly comment: string;
-}
-
-export interface SmbConnectionInfo {
-  readonly url: string;
-  readonly server: string;
-  readonly share: string;
-  readonly isConnected: boolean;
-}
+export type {
+  SmbCredentials,
+  SmbShare,
+  SmbConnectionInfo,
+  SmbAce,
+  SmbAcl,
+  SmbSecurityDescriptor,
+} from './specs/types'
 
 export enum SmbError {
   Unknown = 0,
@@ -35,65 +29,44 @@ export enum SmbError {
 }
 
 export class SmbTaskError extends Error {
-  readonly code: SmbError;
-  readonly taskId?: string;
+  readonly code: SmbError
+  readonly taskId?: string
 
   constructor(message: string, code: SmbError = SmbError.Unknown, taskId?: string) {
-    super(message);
-    this.code = code;
-    this.taskId = taskId;
+    super(message)
+    this.code = code
+    this.taskId = taskId
   }
 }
 
 export interface SmbFileInfo {
-  readonly name: string;
-  readonly path: string;
-  readonly size: number;
-  readonly isDirectory: boolean;
-  readonly modifiedAt: number;
-  readonly accessedAt: number;
-  readonly createdAt: number;
-  readonly changedAt: number;
-  readonly childCount?: number;
-  readonly children?: SmbFileInfo[];
-  readonly securityDescriptor?: SmbSecurityDescriptor;
+  readonly name: string
+  readonly path: string
+  readonly size: number
+  readonly isDirectory: boolean
+  readonly modifiedAt: number
+  readonly accessedAt: number
+  readonly createdAt: number
+  readonly changedAt: number
+  readonly childCount?: number
+  readonly children?: SmbFileInfo[]
+  readonly securityDescriptor?: import('./specs/types').SmbSecurityDescriptor
 }
 
 export interface ListDirectoryOptions {
   /** Nested levels to include as `children`: 0 = this level only (default), -1 = unlimited. */
-  readonly maxDepth?: number;
+  readonly maxDepth?: number
   /** Fetch each item's security descriptor (default `false`). */
-  readonly includeSecurityDescriptor?: boolean;
+  readonly includeSecurityDescriptor?: boolean
   /** Top-level entries per streamed batch (default 10). */
-  readonly batchSize?: number;
-}
-
-export interface SmbAce {
-  readonly aceType: string;
-  readonly aceFlags: string[];
-  readonly mask: string[];
-  readonly sid: string;
-}
-
-export interface SmbAcl {
-  readonly revision: number;
-  readonly aceCount: number;
-  readonly aces: SmbAce[];
-}
-
-export interface SmbSecurityDescriptor {
-  readonly revision: number;
-  readonly control: string[];
-  readonly ownerSid: string;
-  readonly groupSid: string;
-  readonly dacl: SmbAcl;
+  readonly batchSize?: number
 }
 
 export interface PathComponents {
-  readonly parentDirectory: string;
-  readonly baseFileName: string;
-  readonly extension: string;
-  readonly fullFileName: string;
+  readonly parentDirectory: string
+  readonly baseFileName: string
+  readonly extension: string
+  readonly fullFileName: string
 }
 
 export enum TaskStatus {
@@ -131,53 +104,52 @@ export enum SlotState {
 }
 
 export interface SmbTaskState {
-  readonly taskId: string;
-  readonly kind: SmbOperatorKind;
-  readonly status: TaskStatus;
-  readonly determinate: boolean;
-  readonly progress: number;
-  readonly bytesDone: number;
-  readonly totalBytes: number;
-  readonly bytesPerSecond: number;
-  readonly etaSeconds: number;
-  readonly sourcePath: string;
-  readonly destinationPath: string;
-  readonly errorCode: number;
-  readonly errorMessage: string;
-  readonly startedAt: number;
-  readonly updatedAt: number;
-  readonly endedAt: number;
+  readonly taskId: string
+  readonly kind: SmbOperatorKind
+  readonly status: TaskStatus
+  readonly determinate: boolean
+  readonly progress: number
+  readonly bytesDone: number
+  readonly totalBytes: number
+  readonly bytesPerSecond: number
+  readonly etaSeconds: number
+  readonly sourcePath: string
+  readonly destinationPath: string
+  readonly errorCode: number
+  readonly errorMessage: string
+  readonly startedAt: number
+  readonly updatedAt: number
+  readonly endedAt: number
 }
 
 export interface PoolSlotInfo {
-  readonly index: number;
-  readonly interactiveOnly: boolean;
-  readonly state: SlotState;
-  readonly isConnected: boolean;
-  readonly shareName: string;
-  readonly taskId: string;
-  readonly kind: SmbOperatorKind;
+  readonly index: number
+  readonly interactiveOnly: boolean
+  readonly state: SlotState
+  readonly isConnected: boolean
+  readonly shareName: string
+  readonly taskId: string
+  readonly kind: SmbOperatorKind
 }
 
 export interface PoolInfo {
-  readonly poolSize: number;
-  readonly slots: PoolSlotInfo[];
+  readonly poolSize: number
+  readonly slots: PoolSlotInfo[]
 }
 
-export interface NativeSmbTask {
-  cancel(): void;
-  get(): Record<string, string>;
-  subscribe(listener: (snapshot: Record<string, string>) => void): string;
-  unsubscribe(subscriptionId: string): void;
-  getResultValue(): unknown;
+/**
+ * Native HybridObject for one SMB task.
+ * Nitrogen generates cancel/get/subscribe/…; getResultValue and drainEntries
+ * are registered as raw JSI methods on HybridSmbTask.
+ */
+export type NativeSmbTask = NitroNativeSmbTask & {
+  getResultValue(): unknown
 }
 
-export interface NativeSmbListTask extends NativeSmbTask {
+export type NativeSmbListTask = NativeSmbTask & {
   /**
    * Payload-free wake for new entries. Call {@link drainEntries} to pull every
    * entry appended since the last drain (including a late-subscribe replay).
    */
-  subscribeEntries(listener: () => void): string;
-  unsubscribeEntries(subscriptionId: string): void;
-  drainEntries(subscriptionId: string): SmbFileInfo[];
+  drainEntries(subscriptionId: string): SmbFileInfo[]
 }

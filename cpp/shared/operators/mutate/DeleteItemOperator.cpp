@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "../../ReactNativeSmb.hpp"
+#include "../../core/SmbModels.hpp"
 #include "../../io/PipelinedOps.hpp"
 #include "../../io/SmbPathUtil.hpp"
 #include "../../io/listing/DirectoryLister.hpp"
