@@ -1,5 +1,4 @@
 import { NitroModules } from 'react-native-nitro-modules';
-import { shapePoolInfo } from '../bridge/decode';
 import type { ReactNativeSmb } from '../ReactNativeSmb';
 import type {
   ListDirectoryOptions,
@@ -145,13 +144,11 @@ export class SmbClient {
   }
 
   getPoolInfo(): PoolInfo {
-    return shapePoolInfo(this.native.getPoolInfo());
+    return this.native.getPoolInfo();
   }
 
   subscribePoolInfo(cb: (info: PoolInfo) => void): string {
-    const id = this.native.subscribePoolInfo((raw) => {
-      cb(shapePoolInfo(raw));
-    });
+    const id = this.native.subscribePoolInfo(cb);
     cb(this.getPoolInfo());
     return id;
   }

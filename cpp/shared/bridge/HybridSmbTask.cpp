@@ -5,6 +5,7 @@
 #include <variant>
 #include <vector>
 
+#include "BridgeMapping.hpp"
 #include "DomainConverters.hpp"
 #include "../core/EntryStream.hpp"
 #include "../core/SmbTask.hpp"
@@ -21,10 +22,17 @@ HybridSmbTask::HybridSmbTask(std::shared_ptr<react_native_smb::SmbTask> task)
 
 void HybridSmbTask::cancel() { task_->cancel(); }
 
-std::unordered_map<std::string, std::string> HybridSmbTask::get() { return task_->get(); }
+SmbTaskState HybridSmbTask::get() { return toBridge(task_->getState()); }
 
-std::string HybridSmbTask::subscribe(const std::function<void(const std::unordered_map<std::string, std::string>&)>& listener) {
-    return task_->subscribeMap(listener);
+std::string HybridSmbTask::subscribe(const std::function<void(const SmbTaskState& /* snapshot */)>& listener) {
+    return task_->subscribe([listener](const react_native_smb::SmbTaskState& state) {
+        if (listener) {
+            try {
+                listener(toBridge(state));
+            } catch (...) {
+            }
+        }
+    });
 }
 
 void HybridSmbTask::unsubscribe(const std::string& subscriptionId) { task_->unsubscribe(subscriptionId); }

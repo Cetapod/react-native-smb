@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "../connection/PoolTypes.hpp"
-#include "../core/TaskSnapshotCodec.hpp"
 #include "../operators/connection/ConnectOperator.hpp"
 #include "../operators/connection/ConnectShareOperator.hpp"
 #include "../operators/connection/DisconnectOperator.hpp"
@@ -31,10 +30,9 @@
 namespace margelo::nitro::smb {
 
 using react_native_smb::SmbTask;
-using react_native_smb::SmbTaskState;
-using react_native_smb::TaskSnapshotCodec;
+using DomainTaskState = react_native_smb::SmbTaskState;
+using DomainPoolSlotInfo = react_native_smb::PoolSlotInfo;
 using react_native_smb::isTransferKind;
-using react_native_smb::PoolSlotInfo;
 using react_native_smb::SmbErrorCode;
 using react_native_smb::SmbException;
 
@@ -258,40 +256,20 @@ void HybridSMB::resetPool() {
     if (pool_) pool_->resetPool();
 }
 
-namespace {
-
-std::unordered_map<std::string, std::string> encodePoolSlot(const PoolSlotInfo& s) {
-    std::unordered_map<std::string, std::string> m;
-    m["poolSize"] = std::to_string(s.poolSize);
-    m["index"] = std::to_string(s.index);
-    m["interactiveOnly"] = s.interactiveOnly ? "1" : "0";
-    m["state"] = std::to_string(static_cast<int>(s.state));
-    m["kind"] = std::to_string(static_cast<int>(s.kind));
-    m["isConnected"] = s.isConnected ? "1" : "0";
-    m["shareName"] = s.shareName;
-    m["taskId"] = s.taskId;
-    return m;
+PoolInfo HybridSMB::getPoolInfo() {
+    if (!pool_) return PoolInfo(0, {});
+    return toBridge(pool_->getPoolStatus());
 }
 
-}  // namespace
-
-std::vector<std::unordered_map<std::string, std::string>> HybridSMB::getPoolInfo() {
-    std::vector<std::unordered_map<std::string, std::string>> out;
-    if (!pool_) return out;
-    for (const auto& s : pool_->getPoolStatus()) out.push_back(encodePoolSlot(s));
-    return out;
-}
-
-std::string HybridSMB::subscribePoolInfo(const std::function<void(const std::vector<std::unordered_map<std::string, std::string>>&)>& listener) {
+std::string HybridSMB::subscribePoolInfo(const std::function<void(const PoolInfo& /* info */)>& listener) {
     std::string key = std::to_string(poolListenerToken_.fetch_add(1));
     {
         std::lock_guard<std::mutex> lock(poolListenersMutex_);
         poolListeners_.emplace(key, listener);
     }
     if (pool_) {
-        size_t obsId = pool_->addObserver([this, key](const std::vector<PoolSlotInfo>& status) {
-            std::vector<std::unordered_map<std::string, std::string>> out;
-            for (const auto& s : status) out.push_back(encodePoolSlot(s));
+        size_t obsId = pool_->addObserver([this, key](const std::vector<DomainPoolSlotInfo>& status) {
+            const PoolInfo info = toBridge(status);
             PoolListener cb;
             {
                 std::lock_guard<std::mutex> lock(poolListenersMutex_);
@@ -300,7 +278,7 @@ std::string HybridSMB::subscribePoolInfo(const std::function<void(const std::vec
             }
             if (cb) {
                 try {
-                    cb(out);
+                    cb(info);
                 } catch (...) {
                 }
             }
@@ -328,15 +306,15 @@ void HybridSMB::unsubscribePoolInfo(const std::string& subscriptionId) {
 }
 
 // --- tasks ---
-std::string HybridSMB::subscribeTaskEvents(const std::function<void(const std::unordered_map<std::string, std::string>&)>& listener) {
+std::string HybridSMB::subscribeTaskEvents(const std::function<void(const SmbTaskState& /* event */)>& listener) {
     if (!observer_) return "";
-    auto eventId = std::make_shared<std::atomic<uint64_t>>(1);
-    return observer_->subscribeAll([listener, eventId](const SmbTaskState& s) {
-        std::unordered_map<std::string, std::string> m = TaskSnapshotCodec::encode(s);
-        m["eventId"] = std::to_string(eventId->fetch_add(1));
-        m["type"] = std::to_string(static_cast<int>(s.status));
-        m["ts"] = std::to_string(s.updatedAt);
-        listener(m);
+    return observer_->subscribeAll([listener](const DomainTaskState& state) {
+        if (listener) {
+            try {
+                listener(toBridge(state));
+            } catch (...) {
+            }
+        }
     });
 }
 
@@ -344,35 +322,35 @@ void HybridSMB::unsubscribeTaskEvents(const std::string& subscriptionId) {
     if (observer_) observer_->unsubscribe(subscriptionId);
 }
 
-std::unordered_map<std::string, std::string> HybridSMB::getTask(const std::string& taskId) {
-    if (!observer_) return TaskSnapshotCodec::notFound();
+std::optional<SmbTaskState> HybridSMB::getTask(const std::string& taskId) {
+    if (!observer_) return std::nullopt;
     auto snapshot = observer_->getTask(taskId);
-    if (!snapshot) return TaskSnapshotCodec::notFound();
-    return TaskSnapshotCodec::encode(*snapshot);
+    if (!snapshot) return std::nullopt;
+    return toBridge(*snapshot);
 }
 
-std::vector<std::unordered_map<std::string, std::string>> HybridSMB::getActiveTasks() {
-    std::vector<std::unordered_map<std::string, std::string>> out;
+std::vector<SmbTaskState> HybridSMB::getActiveTasks() {
+    std::vector<SmbTaskState> out;
     if (!observer_) return out;
-    for (const auto& snapshot : observer_->getActive()) out.push_back(TaskSnapshotCodec::encode(snapshot));
+    for (const auto& snapshot : observer_->getActive()) out.push_back(toBridge(snapshot));
     return out;
 }
 
-std::vector<std::unordered_map<std::string, std::string>> HybridSMB::getTransferTasks() {
-    std::vector<std::unordered_map<std::string, std::string>> out;
+std::vector<SmbTaskState> HybridSMB::getTransferTasks() {
+    std::vector<SmbTaskState> out;
     if (!observer_) return out;
-    for (const auto& snapshot : observer_->getTransfers()) out.push_back(TaskSnapshotCodec::encode(snapshot));
+    for (const auto& snapshot : observer_->getTransfers()) out.push_back(toBridge(snapshot));
     return out;
 }
 
-std::vector<std::unordered_map<std::string, std::string>> HybridSMB::getTaskHistory(double limit, double offset) {
-    std::vector<std::unordered_map<std::string, std::string>> out;
+std::vector<SmbTaskState> HybridSMB::getTaskHistory(double limit, double offset) {
+    std::vector<SmbTaskState> out;
     if (!observer_) return out;
     const int limitInt = static_cast<int>(limit);
     const int offsetInt = static_cast<int>(offset);
     const size_t safeLimit = limitInt < 0 ? 0 : static_cast<size_t>(limitInt);
     const size_t safeOffset = offsetInt < 0 ? 0 : static_cast<size_t>(offsetInt);
-    for (const auto& snapshot : observer_->getHistory(safeLimit, safeOffset)) out.push_back(TaskSnapshotCodec::encode(snapshot));
+    for (const auto& snapshot : observer_->getHistory(safeLimit, safeOffset)) out.push_back(toBridge(snapshot));
     return out;
 }
 

@@ -1,4 +1,3 @@
-import { shapeTaskSnapshot } from '../bridge/decode';
 import { isTerminalStatus, isTransferKind } from '../labels';
 import type { ReactNativeSmb } from '../ReactNativeSmb';
 import { type SmbTaskState } from '../types';
@@ -26,16 +25,15 @@ export class TransferStore {
     const generation = ++this.generation;
 
     try {
-      subId = this.native.subscribeTaskEvents((raw) => {
+      subId = this.native.subscribeTaskEvents((snap) => {
         if (this.generation !== generation) return;
         try {
-          this.upsert(raw);
+          this.upsert(snap);
         } catch {}
       });
 
-      for (const raw of this.native.getTransferTasks()) {
-        const snap = shapeTaskSnapshot(raw);
-        if (!snap || !isTransferKind(snap.kind) || this.hidden.has(snap.taskId)) continue;
+      for (const snap of this.native.getTransferTasks()) {
+        if (!isTransferKind(snap.kind) || this.hidden.has(snap.taskId)) continue;
         // Events received after subscription are newer than this hydration snapshot.
         if (!this.tasks.has(snap.taskId)) this.tasks.set(snap.taskId, snap);
       }
@@ -78,9 +76,8 @@ export class TransferStore {
     return this.snapshot;
   }
 
-  private upsert(raw: Record<string, string>): void {
-    const snap = shapeTaskSnapshot(raw);
-    if (!snap || !isTransferKind(snap.kind) || this.hidden.has(snap.taskId)) return;
+  private upsert(snap: SmbTaskState): void {
+    if (!isTransferKind(snap.kind) || this.hidden.has(snap.taskId)) return;
 
     const existing = this.tasks.get(snap.taskId);
     if (existing && (isTerminalStatus(existing.status) || snap.updatedAt < existing.updatedAt)) return;

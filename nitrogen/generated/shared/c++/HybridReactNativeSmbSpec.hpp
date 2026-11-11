@@ -19,16 +19,22 @@ namespace margelo::nitro::smb { class HybridNativeSmbTaskSpec; }
 namespace margelo::nitro::smb { struct SmbCredentials; }
 // Forward declaration of `HybridNativeSmbListTaskSpec` to properly resolve imports.
 namespace margelo::nitro::smb { class HybridNativeSmbListTaskSpec; }
+// Forward declaration of `SmbTaskState` to properly resolve imports.
+namespace margelo::nitro::smb { struct SmbTaskState; }
+// Forward declaration of `PoolInfo` to properly resolve imports.
+namespace margelo::nitro::smb { struct PoolInfo; }
 
 #include <memory>
 #include "HybridNativeSmbTaskSpec.hpp"
 #include <string>
 #include "SmbCredentials.hpp"
 #include "HybridNativeSmbListTaskSpec.hpp"
-#include <unordered_map>
+#include "SmbTaskState.hpp"
 #include <functional>
+#include <optional>
 #include <vector>
 #include <NitroModules/Promise.hpp>
+#include "PoolInfo.hpp"
 
 namespace margelo::nitro::smb {
 
@@ -79,19 +85,19 @@ namespace margelo::nitro::smb {
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> renameItem(const std::string& taskId, const std::string& currentPath, const std::string& newName) = 0;
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> copyItem(const std::string& taskId, const std::string& fromPath, const std::string& toPath, bool recursive) = 0;
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> duplicateItem(const std::string& taskId, const std::string& path) = 0;
-      virtual std::string subscribeTaskEvents(const std::function<void(const std::unordered_map<std::string, std::string>& /* event */)>& listener) = 0;
+      virtual std::string subscribeTaskEvents(const std::function<void(const SmbTaskState& /* event */)>& listener) = 0;
       virtual void unsubscribeTaskEvents(const std::string& subscriptionId) = 0;
-      virtual std::unordered_map<std::string, std::string> getTask(const std::string& taskId) = 0;
-      virtual std::vector<std::unordered_map<std::string, std::string>> getActiveTasks() = 0;
-      virtual std::vector<std::unordered_map<std::string, std::string>> getTransferTasks() = 0;
-      virtual std::vector<std::unordered_map<std::string, std::string>> getTaskHistory(double limit, double offset) = 0;
+      virtual std::optional<SmbTaskState> getTask(const std::string& taskId) = 0;
+      virtual std::vector<SmbTaskState> getActiveTasks() = 0;
+      virtual std::vector<SmbTaskState> getTransferTasks() = 0;
+      virtual std::vector<SmbTaskState> getTaskHistory(double limit, double offset) = 0;
       virtual void cancelTask(const std::string& taskId) = 0;
       virtual void cancelTransferTasks() = 0;
       virtual void clearTaskHistory(int64_t beforeTs) = 0;
       virtual std::shared_ptr<Promise<void>> destroy() = 0;
-      virtual std::string subscribePoolInfo(const std::function<void(const std::vector<std::unordered_map<std::string, std::string>>& /* snapshot */)>& listener) = 0;
+      virtual std::string subscribePoolInfo(const std::function<void(const PoolInfo& /* info */)>& listener) = 0;
       virtual void unsubscribePoolInfo(const std::string& subscriptionId) = 0;
-      virtual std::vector<std::unordered_map<std::string, std::string>> getPoolInfo() = 0;
+      virtual PoolInfo getPoolInfo() = 0;
       virtual void resetPool() = 0;
 
     protected:

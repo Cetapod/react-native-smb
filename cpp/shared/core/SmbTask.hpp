@@ -1,11 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <future>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "SmbTaskCore.hpp"
@@ -25,13 +23,12 @@ class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask>
     void start();
     size_t spawn(std::vector<std::unique_ptr<OperatorBase>> moreOps);
 
+    using SmbTaskCore::getState;
     using SmbTaskCore::subscribe;
+    using SmbTaskCore::unsubscribe;
 
     std::string getId() { return SmbTaskCore::getId(); }
     void cancel();
-    std::unordered_map<std::string, std::string> get();
-    std::string subscribeMap(const std::function<void(const std::unordered_map<std::string, std::string>&)>& listener);
-    void unsubscribe(const std::string& id) { SmbTaskCore::unsubscribe(id); }
 
     const std::shared_ptr<EntryStream>& entryStream() const { return entries_; }
 

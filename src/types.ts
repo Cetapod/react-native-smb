@@ -8,6 +8,15 @@ export type {
   SmbAce,
   SmbAcl,
   SmbSecurityDescriptor,
+  SmbTaskState,
+  PoolSlotInfo,
+  PoolInfo,
+} from './specs/types'
+
+export {
+  TaskStatus,
+  SmbOperatorKind,
+  SlotState,
 } from './specs/types'
 
 export enum SmbError {
@@ -68,74 +77,6 @@ export interface PathComponents {
   readonly baseFileName: string
   readonly extension: string
   readonly fullFileName: string
-}
-
-export enum TaskStatus {
-  Idle = 0,
-  Pending = 1,
-  Running = 2,
-  Success = 3,
-  Error = 4,
-  Cancelled = 5,
-}
-
-export enum SmbOperatorKind {
-  Initialize = 0,
-  Connect = 1,
-  ConnectShare = 2,
-  Disconnect = 3,
-  ListShares = 4,
-  ListDirectory = 5,
-  GetPathInfo = 6,
-  GetSecurityDescriptor = 7,
-  DownloadFile = 8,
-  UploadFile = 9,
-  CreateDirectory = 10,
-  DeleteItem = 11,
-  MoveItem = 12,
-  RenameItem = 13,
-  CopyItem = 14,
-  DuplicateItem = 15,
-}
-
-export enum SlotState {
-  Idle = 0,
-  Assigned = 1,
-  Activating = 2,
-}
-
-export interface SmbTaskState {
-  readonly taskId: string
-  readonly kind: SmbOperatorKind
-  readonly status: TaskStatus
-  readonly determinate: boolean
-  readonly progress: number
-  readonly bytesDone: number
-  readonly totalBytes: number
-  readonly bytesPerSecond: number
-  readonly etaSeconds: number
-  readonly sourcePath: string
-  readonly destinationPath: string
-  readonly errorCode: number
-  readonly errorMessage: string
-  readonly startedAt: number
-  readonly updatedAt: number
-  readonly endedAt: number
-}
-
-export interface PoolSlotInfo {
-  readonly index: number
-  readonly interactiveOnly: boolean
-  readonly state: SlotState
-  readonly isConnected: boolean
-  readonly shareName: string
-  readonly taskId: string
-  readonly kind: SmbOperatorKind
-}
-
-export interface PoolInfo {
-  readonly poolSize: number
-  readonly slots: PoolSlotInfo[]
 }
 
 /**

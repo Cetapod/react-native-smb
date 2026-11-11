@@ -1,4 +1,5 @@
 import type { HybridObject } from 'react-native-nitro-modules'
+import type { SmbTaskState } from './types'
 
 /**
  * Nitro HybridObject for one native SMB operation.
@@ -9,7 +10,7 @@ import type { HybridObject } from 'react-native-nitro-modules'
  */
 export interface NativeSmbTask extends HybridObject<{ ios: 'c++'; android: 'c++' }> {
   cancel(): void
-  get(): Record<string, string>
-  subscribe(listener: (snapshot: Record<string, string>) => void): string
+  get(): SmbTaskState
+  subscribe(listener: (snapshot: SmbTaskState) => void): string
   unsubscribe(subscriptionId: string): void
 }

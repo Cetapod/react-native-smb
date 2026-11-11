@@ -7,8 +7,6 @@
 #include "../util/SmbErrorMapper.hpp"
 #include "../util/SmbException.hpp"
 #include "EntryStream.hpp"
-#include "TaskSnapshotCodec.hpp"
-
 namespace react_native_smb {
 
 SmbTask::SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool)
@@ -102,21 +100,6 @@ size_t SmbTask::spawn(std::vector<std::unique_ptr<OperatorBase>> moreOps) {
         for (size_t i = 0; i < count; ++i) launchOp(first + i);
     }
     return first;
-}
-
-std::unordered_map<std::string, std::string> SmbTask::get() {
-    return TaskSnapshotCodec::encode(getState());
-}
-
-std::string SmbTask::subscribeMap(const std::function<void(const std::unordered_map<std::string, std::string>&)>& listener) {
-    return SmbTaskCore::subscribe([listener](const SmbTaskState& s) {
-        if (listener) {
-            try {
-                listener(TaskSnapshotCodec::encode(s));
-            } catch (...) {
-            }
-        }
-    });
 }
 
 }  // namespace react_native_smb

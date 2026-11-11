@@ -11,6 +11,9 @@
 #include "../core/TaskObserverHub.hpp"
 #include "../operators/OperatorBase.hpp"
 
+#include "PoolInfo.hpp"
+#include "SmbTaskState.hpp"
+
 #include <NitroModules/Promise.hpp>
 #include <atomic>
 #include <condition_variable>
@@ -19,8 +22,8 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace margelo::nitro::smb {
@@ -48,7 +51,7 @@ class HybridSMB : public HybridReactNativeSmbSpec {
     void shutdownImpl();
     static void releaseTaskRun(const std::shared_ptr<TaskRunState>& state);
 
-    using PoolListener = std::function<void(const std::vector<std::unordered_map<std::string, std::string>>&)>;
+    using PoolListener = std::function<void(const PoolInfo&)>;
     std::map<std::string, PoolListener> poolListeners_;
     std::map<std::string, size_t> poolObserverIds_;
     std::mutex poolListenersMutex_;
@@ -97,12 +100,12 @@ class HybridSMB : public HybridReactNativeSmbSpec {
     std::shared_ptr<HybridNativeSmbTaskSpec> duplicateItem(const std::string& taskId, const std::string& path) override;
 
     // --- tasks ---
-    std::string subscribeTaskEvents(const std::function<void(const std::unordered_map<std::string, std::string>&)>& listener) override;
+    std::string subscribeTaskEvents(const std::function<void(const SmbTaskState& /* event */)>& listener) override;
     void unsubscribeTaskEvents(const std::string& subscriptionId) override;
-    std::unordered_map<std::string, std::string> getTask(const std::string& taskId) override;
-    std::vector<std::unordered_map<std::string, std::string>> getActiveTasks() override;
-    std::vector<std::unordered_map<std::string, std::string>> getTransferTasks() override;
-    std::vector<std::unordered_map<std::string, std::string>> getTaskHistory(double limit, double offset) override;
+    std::optional<SmbTaskState> getTask(const std::string& taskId) override;
+    std::vector<SmbTaskState> getActiveTasks() override;
+    std::vector<SmbTaskState> getTransferTasks() override;
+    std::vector<SmbTaskState> getTaskHistory(double limit, double offset) override;
     void cancelTask(const std::string& taskId) override;
     void cancelTransferTasks() override;
     void clearTaskHistory(int64_t beforeTs) override;
@@ -111,9 +114,9 @@ class HybridSMB : public HybridReactNativeSmbSpec {
     std::shared_ptr<Promise<void>> destroy() override;
 
     // --- pool ---
-    std::string subscribePoolInfo(const std::function<void(const std::vector<std::unordered_map<std::string, std::string>>&)>& listener) override;
+    std::string subscribePoolInfo(const std::function<void(const PoolInfo& /* info */)>& listener) override;
     void unsubscribePoolInfo(const std::string& subscriptionId) override;
-    std::vector<std::unordered_map<std::string, std::string>> getPoolInfo() override;
+    PoolInfo getPoolInfo() override;
     void resetPool() override;
 };
 

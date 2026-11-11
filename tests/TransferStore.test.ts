@@ -2,27 +2,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ReactNativeSmb } from '../src/ReactNativeSmb';
 import { TransferStore } from '../src/core/TransferStore';
-import { SmbOperatorKind, TaskStatus } from '../src/types';
+import { SmbOperatorKind, TaskStatus, type SmbTaskState } from '../src/types';
+import { makeTaskSnapshot } from './helpers/taskSnapshot';
 
-function snapshot(taskId: string, status: TaskStatus, updatedAt = 1): Record<string, string> {
-  return {
-    exists: '1',
+function snapshot(taskId: string, status: TaskStatus, updatedAt = 1): SmbTaskState {
+  return makeTaskSnapshot(status, {
     taskId,
-    kind: String(SmbOperatorKind.DownloadFile),
-    status: String(status),
-    determinate: 'true',
-    progress: status === TaskStatus.Success ? '1' : '0.5',
-    updatedAt: String(updatedAt),
-  };
+    kind: SmbOperatorKind.DownloadFile,
+    updatedAt,
+  });
 }
 
 class FakeNative {
-  transfers: Record<string, string>[] = [];
-  readonly listeners = new Map<string, (raw: Record<string, string>) => void>();
+  transfers: SmbTaskState[] = [];
+  readonly listeners = new Map<string, (snap: SmbTaskState) => void>();
   readonly unsubscribed: string[] = [];
   throwOnTransfers = false;
 
-  subscribeTaskEvents(listener: (raw: Record<string, string>) => void): string {
+  subscribeTaskEvents(listener: (snap: SmbTaskState) => void): string {
     const id = `sub-${this.listeners.size + 1}`;
     this.listeners.set(id, listener);
     return id;
@@ -33,13 +30,13 @@ class FakeNative {
     this.listeners.delete(id);
   }
 
-  getTransferTasks(): Record<string, string>[] {
+  getTransferTasks(): SmbTaskState[] {
     if (this.throwOnTransfers) throw new Error('transfer task query failed');
     return this.transfers;
   }
 
-  emit(raw: Record<string, string>): void {
-    for (const listener of this.listeners.values()) listener(raw);
+  emit(snap: SmbTaskState): void {
+    for (const listener of this.listeners.values()) listener(snap);
   }
 }
 

@@ -13,10 +13,11 @@
 #error NitroModules cannot be found! Are you sure you installed NitroModules properly?
 #endif
 
+// Forward declaration of `SmbTaskState` to properly resolve imports.
+namespace margelo::nitro::smb { struct SmbTaskState; }
 
-
+#include "SmbTaskState.hpp"
 #include <string>
-#include <unordered_map>
 #include <functional>
 
 namespace margelo::nitro::smb {
@@ -51,8 +52,8 @@ namespace margelo::nitro::smb {
     public:
       // Methods
       virtual void cancel() = 0;
-      virtual std::unordered_map<std::string, std::string> get() = 0;
-      virtual std::string subscribe(const std::function<void(const std::unordered_map<std::string, std::string>& /* snapshot */)>& listener) = 0;
+      virtual SmbTaskState get() = 0;
+      virtual std::string subscribe(const std::function<void(const SmbTaskState& /* snapshot */)>& listener) = 0;
       virtual void unsubscribe(const std::string& subscriptionId) = 0;
 
     protected:

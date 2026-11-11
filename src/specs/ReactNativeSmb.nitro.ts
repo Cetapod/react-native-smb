@@ -1,7 +1,7 @@
 import type { HybridObject, Int64 } from 'react-native-nitro-modules'
 import type { NativeSmbListTask } from './NativeSmbListTask.nitro'
 import type { NativeSmbTask } from './NativeSmbTask.nitro'
-import type { SmbCredentials } from './types'
+import type { PoolInfo, SmbCredentials, SmbTaskState } from './types'
 
 /**
  * Nitro HybridObject for the SMB client.
@@ -37,20 +37,20 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
   copyItem(taskId: string, fromPath: string, toPath: string, recursive: boolean): NativeSmbTask
   duplicateItem(taskId: string, path: string): NativeSmbTask
 
-  subscribeTaskEvents(listener: (event: Record<string, string>) => void): string
+  subscribeTaskEvents(listener: (event: SmbTaskState) => void): string
   unsubscribeTaskEvents(subscriptionId: string): void
-  getTask(taskId: string): Record<string, string>
-  getActiveTasks(): Record<string, string>[]
-  getTransferTasks(): Record<string, string>[]
-  getTaskHistory(limit: number, offset: number): Record<string, string>[]
+  getTask(taskId: string): SmbTaskState | undefined
+  getActiveTasks(): SmbTaskState[]
+  getTransferTasks(): SmbTaskState[]
+  getTaskHistory(limit: number, offset: number): SmbTaskState[]
   cancelTask(taskId: string): void
   cancelTransferTasks(): void
   clearTaskHistory(beforeTs: Int64): void
 
   destroy(): Promise<void>
 
-  subscribePoolInfo(listener: (snapshot: Record<string, string>[]) => void): string
+  subscribePoolInfo(listener: (info: PoolInfo) => void): string
   unsubscribePoolInfo(subscriptionId: string): void
-  getPoolInfo(): Record<string, string>[]
+  getPoolInfo(): PoolInfo
   resetPool(): void
 }

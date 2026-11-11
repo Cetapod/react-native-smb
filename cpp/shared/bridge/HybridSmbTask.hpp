@@ -1,11 +1,11 @@
 #pragma once
 
 #include "HybridNativeSmbTaskSpec.hpp"
+#include "SmbTaskState.hpp"
 
 #include <jsi/jsi.h>
 #include <memory>
 #include <string>
-#include <unordered_map>
 
 namespace react_native_smb {
 class SmbTask;
@@ -24,18 +24,18 @@ class HybridSmbTask : public virtual HybridNativeSmbTaskSpec {
     ~HybridSmbTask() override = default;
 
     void cancel() override;
-    std::unordered_map<std::string, std::string> get() override;
-    std::string subscribe(const std::function<void(const std::unordered_map<std::string, std::string>&)>& listener) override;
+    SmbTaskState get() override;
+    std::string subscribe(const std::function<void(const SmbTaskState& /* snapshot */)>& listener) override;
     void unsubscribe(const std::string& subscriptionId) override;
+
+    // Public so HybridSmbListTask can register the same raw method on its prototype.
+    facebook::jsi::Value getResultValueRaw(facebook::jsi::Runtime& runtime, const facebook::jsi::Value& thisValue,
+                                           const facebook::jsi::Value* args, size_t count);
 
    protected:
     void loadHybridMethods() override;
 
     std::shared_ptr<react_native_smb::SmbTask> task_;
-
-    facebook::jsi::Value getResultValueRaw(facebook::jsi::Runtime& runtime, const facebook::jsi::Value& thisValue,
-                                           const facebook::jsi::Value* args, size_t count);
 };
-
 
 }  // namespace margelo::nitro::smb
