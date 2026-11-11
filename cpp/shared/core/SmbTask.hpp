@@ -8,8 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <jsi/jsi.h>
-
 #include "SmbTaskCore.hpp"
 
 namespace react_native_smb {
@@ -18,8 +16,6 @@ class OperatorBase;
 class SmbConnectionPool;
 class EntryStream;
 struct SmbFileInfo;
-
-namespace jsi = facebook::jsi;
 
 class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask> {
    public:
@@ -45,8 +41,6 @@ class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask>
     const std::shared_ptr<EntryStream>& entryStream() const { return entries_; }
 
     std::future<void> result() { return completionFuture(); }
-
-    jsi::Value getResultValue(jsi::Runtime& runtime) const { return SmbTaskCore::getResultValue(runtime); }
 
    private:
     std::weak_ptr<SmbConnectionPool> pool_;

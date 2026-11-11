@@ -1,29 +1,26 @@
 #pragma once
 
-#include <any>
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <future>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
-#include <jsi/jsi.h>
-
 #include "CancellationToken.hpp"
 #include "SmbEnums.hpp"
+#include "SmbTaskResult.hpp"
 #include "SmbTypes.hpp"
 
 namespace react_native_smb {
 
 class OperatorBase;
 
-namespace jsi = facebook::jsi;
-
 // Thread-safe state, result storage, and subscriber fan-out. No HybridObject,
-// no pool orchestration.
+// no pool orchestration, no JSI.
 class SmbTaskCore {
    public:
     SmbTaskCore(std::string id, SmbOperatorKind kind);
@@ -43,8 +40,8 @@ class SmbTaskCore {
     void onOpStatus(size_t opIndex, SmbTaskStatus s, const std::string& error, int code);
     void onOpProgress(size_t opIndex, double done, double total);
 
-    void publishResult(std::any value, std::function<jsi::Value(jsi::Runtime&, const std::any&)> converter);
-    jsi::Value getResultValue(jsi::Runtime& runtime) const;
+    void publishResult(SmbTaskResult value);
+    SmbTaskResult publishedResult() const;
 
     std::string subscribe(SnapshotListener listener);
     void unsubscribe(const std::string& id);
@@ -97,8 +94,7 @@ class SmbTaskCore {
     mutable std::mutex listenersMutex_;
     std::atomic<size_t> nextListenerId_{1};
 
-    std::any resultValue_;
-    std::function<jsi::Value(jsi::Runtime&, const std::any&)> resultConverter_;
+    SmbTaskResult resultValue_;
 
     void writeToSnapshot(SmbTaskState& out) const;
     void notifyListeners();

@@ -9,8 +9,6 @@
 
 namespace react_native_smb {
 
-namespace jsi = facebook::jsi;
-
 namespace {
 
 std::string sanitizedErrorMessage(std::string message) {
@@ -117,20 +115,14 @@ void SmbTaskCore::unsubscribe(const std::string& id) {
     listeners_.erase(id);
 }
 
-void SmbTaskCore::publishResult(std::any value,
-                                std::function<jsi::Value(jsi::Runtime&, const std::any&)> converter) {
+void SmbTaskCore::publishResult(SmbTaskResult value) {
     if (settled_.load(std::memory_order_acquire)) return;
     resultValue_ = std::move(value);
-    resultConverter_ = std::move(converter);
 }
 
-jsi::Value SmbTaskCore::getResultValue(jsi::Runtime& runtime) const {
-    if (!resultConverter_) return jsi::Value::undefined();
-    try {
-        return resultConverter_(runtime, resultValue_);
-    } catch (...) {
-        return jsi::Value::undefined();
-    }
+SmbTaskResult SmbTaskCore::publishedResult() const {
+    std::lock_guard<std::mutex> lk(stateMutex_);
+    return resultValue_;
 }
 
 std::future<void> SmbTaskCore::completionFuture() { return done_.get_future(); }

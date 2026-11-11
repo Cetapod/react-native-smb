@@ -2,10 +2,7 @@
 
 #include "OperatorBase.hpp"
 
-// For JSIConverter<T> in publishThisResult convenience.
-#include "../core/SmbModels.hpp"
-
-namespace jsi = facebook::jsi;
+#include "../core/SmbTaskResult.hpp"
 
 namespace react_native_smb {
 
@@ -20,16 +17,9 @@ class Operator : public OperatorBase {
    protected:
     T result_{};
 
-    // Convenience for value-producing operators: publish our result_ + the
-    // correct converter directly to the owning task. Call this at the end of a
-    // successful run() (before or after emitStatus(Success)).
-    void publishThisResult() {
-        publishResult(std::any(result_), [](jsi::Runtime& rt, const std::any& a) -> jsi::Value {
-            const T* v = std::any_cast<T>(&a);
-            if (!v) return jsi::Value::undefined();
-            return margelo::nitro::JSIConverter<T>::toJSI(rt, *v);
-        });
-    }
+    // Convenience for value-producing operators: publish our result_ directly
+    // to the owning task. Call this at the end of a successful run().
+    void publishThisResult() { publishResult(SmbTaskResult{result_}); }
 };
 
 }  // namespace react_native_smb

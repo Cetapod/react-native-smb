@@ -1,9 +1,14 @@
 #include "HybridSmbTask.hpp"
 
 #include <stdexcept>
+#include <type_traits>
+#include <variant>
+#include <vector>
 
-#include "../core/SmbModels.hpp"
+#include "DomainConverters.hpp"
+#include "../core/EntryStream.hpp"
 #include "../core/SmbTask.hpp"
+#include "../core/SmbTaskResult.hpp"
 
 namespace margelo::nitro::smb {
 
@@ -32,7 +37,34 @@ void HybridSmbTask::unsubscribeEntries(const std::string& subscriptionId) { task
 
 facebook::jsi::Value HybridSmbTask::getResultValueRaw(facebook::jsi::Runtime& runtime, const facebook::jsi::Value& /*thisValue*/,
                                                       const facebook::jsi::Value* /*args*/, size_t /*count*/) {
-    return task_->getResultValue(runtime);
+    using react_native_smb::ListingResult;
+    using react_native_smb::SmbConnectionInfo;
+    using react_native_smb::SmbFileInfo;
+    using react_native_smb::SmbSecurityDescriptor;
+    using react_native_smb::SmbShare;
+    using react_native_smb::SmbTaskResult;
+
+    const SmbTaskResult value = task_->publishedResult();
+    try {
+        return std::visit(
+            [&](const auto& v) -> facebook::jsi::Value {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, std::monostate>) {
+                    return facebook::jsi::Value::undefined();
+                } else if constexpr (std::is_same_v<T, ListingResult>) {
+                    const auto& stream = task_->entryStream();
+                    if (!stream) return facebook::jsi::Value::undefined();
+                    return stream->read([&](const std::vector<SmbFileInfo>& entries) {
+                        return JSIConverter<std::vector<SmbFileInfo>>::toJSI(runtime, entries);
+                    });
+                } else {
+                    return JSIConverter<T>::toJSI(runtime, v);
+                }
+            },
+            value);
+    } catch (...) {
+        return facebook::jsi::Value::undefined();
+    }
 }
 
 facebook::jsi::Value HybridSmbTask::drainEntriesRaw(facebook::jsi::Runtime& runtime, const facebook::jsi::Value& /*thisValue*/,

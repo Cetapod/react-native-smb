@@ -50,8 +50,8 @@ void OperatorBase::setSourceDestination(const std::string& source, const std::st
     if (ctx_.task) ctx_.task->setPaths(source, destination);
 }
 
-void OperatorBase::publishResult(std::any value, std::function<jsi::Value(jsi::Runtime&, const std::any&)> converter) {
-    if (ctx_.task) ctx_.task->publishResult(std::move(value), std::move(converter));
+void OperatorBase::publishResult(SmbTaskResult value) {
+    if (ctx_.task) ctx_.task->publishResult(std::move(value));
 }
 
 std::shared_ptr<EntryStream> OperatorBase::entryStream() const {
