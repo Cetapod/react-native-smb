@@ -1,3 +1,4 @@
+import type { NativeSmbListTask as NitroNativeSmbListTask } from './specs/NativeSmbListTask.nitro'
 import type { NativeSmbTask as NitroNativeSmbTask } from './specs/NativeSmbTask.nitro'
 
 export type {
@@ -139,17 +140,21 @@ export interface PoolInfo {
 
 /**
  * Native HybridObject for one SMB task.
- * Nitrogen generates cancel/get/subscribe/…; getResultValue and drainEntries
- * are registered as raw JSI methods on HybridSmbTask.
+ * Nitrogen generates cancel/get/subscribe/…; getResultValue is a raw JSI method.
  */
 export type NativeSmbTask = NitroNativeSmbTask & {
   getResultValue(): unknown
 }
 
-export type NativeSmbListTask = NativeSmbTask & {
-  /**
-   * Payload-free wake for new entries. Call {@link drainEntries} to pull every
-   * entry appended since the last drain (including a late-subscribe replay).
-   */
-  drainEntries(subscriptionId: string): SmbFileInfo[]
-}
+/**
+ * Listing HybridObject. Nitrogen generates entry signals; drainEntries is raw
+ * because SmbFileInfo is recursive.
+ */
+export type NativeSmbListTask = NitroNativeSmbListTask &
+  NativeSmbTask & {
+    /**
+     * Payload-free wake for new entries. Call {@link drainEntries} to pull every
+     * entry appended since the last drain (including a late-subscribe replay).
+     */
+    drainEntries(subscriptionId: string): SmbFileInfo[]
+  }

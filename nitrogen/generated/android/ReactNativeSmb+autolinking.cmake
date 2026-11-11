@@ -33,6 +33,7 @@ target_sources(
   # Autolinking Setup
   ../nitrogen/generated/android/ReactNativeSmbOnLoad.cpp
   # Shared Nitrogen C++ sources
+  ../nitrogen/generated/shared/c++/HybridNativeSmbListTaskSpec.cpp
   ../nitrogen/generated/shared/c++/HybridNativeSmbTaskSpec.cpp
   ../nitrogen/generated/shared/c++/HybridReactNativeSmbSpec.cpp
   # Android-specific Nitrogen C++ sources

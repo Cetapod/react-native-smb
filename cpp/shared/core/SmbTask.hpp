@@ -19,8 +19,6 @@ struct SmbFileInfo;
 
 class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask> {
    public:
-    using EntriesListener = std::function<void()>;
-
     SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool);
     ~SmbTask();
 
@@ -35,16 +33,13 @@ class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask>
     std::string subscribeMap(const std::function<void(const std::unordered_map<std::string, std::string>&)>& listener);
     void unsubscribe(const std::string& id) { SmbTaskCore::unsubscribe(id); }
 
-    std::string subscribeEntries(const EntriesListener& listener);
-    void unsubscribeEntries(const std::string& id);
-    std::vector<SmbFileInfo> drainEntries(const std::string& id);
     const std::shared_ptr<EntryStream>& entryStream() const { return entries_; }
 
     std::future<void> result() { return completionFuture(); }
 
    private:
     std::weak_ptr<SmbConnectionPool> pool_;
-    std::shared_ptr<EntryStream> entries_;
+    std::shared_ptr<EntryStream> entries_;  // non-null only for ListDirectory
 
     void launchOp(size_t opIndex);
     size_t appendOps(std::vector<std::unique_ptr<OperatorBase>>& more);

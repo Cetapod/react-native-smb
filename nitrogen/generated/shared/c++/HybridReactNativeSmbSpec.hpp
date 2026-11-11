@@ -17,11 +17,14 @@
 namespace margelo::nitro::smb { class HybridNativeSmbTaskSpec; }
 // Forward declaration of `SmbCredentials` to properly resolve imports.
 namespace margelo::nitro::smb { struct SmbCredentials; }
+// Forward declaration of `HybridNativeSmbListTaskSpec` to properly resolve imports.
+namespace margelo::nitro::smb { class HybridNativeSmbListTaskSpec; }
 
 #include <memory>
 #include "HybridNativeSmbTaskSpec.hpp"
 #include <string>
 #include "SmbCredentials.hpp"
+#include "HybridNativeSmbListTaskSpec.hpp"
 #include <unordered_map>
 #include <functional>
 #include <vector>
@@ -65,7 +68,7 @@ namespace margelo::nitro::smb {
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> connectShare(const std::string& taskId, const std::string& share) = 0;
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> disconnect(const std::string& taskId) = 0;
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> listShares(const std::string& taskId) = 0;
-      virtual std::shared_ptr<HybridNativeSmbTaskSpec> listDirectory(const std::string& taskId, const std::string& path, double maxDepth, bool includeSecurityDescriptor, double batchSize) = 0;
+      virtual std::shared_ptr<HybridNativeSmbListTaskSpec> listDirectory(const std::string& taskId, const std::string& path, double maxDepth, bool includeSecurityDescriptor, double batchSize) = 0;
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> getPathInfo(const std::string& taskId, const std::string& path) = 0;
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> getSecurityDescriptor(const std::string& taskId, const std::string& path) = 0;
       virtual std::shared_ptr<HybridNativeSmbTaskSpec> downloadFile(const std::string& taskId, const std::string& remotePath, const std::string& localPath) = 0;

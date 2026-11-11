@@ -54,8 +54,6 @@ namespace margelo::nitro::smb {
       virtual std::unordered_map<std::string, std::string> get() = 0;
       virtual std::string subscribe(const std::function<void(const std::unordered_map<std::string, std::string>& /* snapshot */)>& listener) = 0;
       virtual void unsubscribe(const std::string& subscriptionId) = 0;
-      virtual std::string subscribeEntries(const std::function<void()>& listener) = 0;
-      virtual void unsubscribeEntries(const std::string& subscriptionId) = 0;
 
     protected:
       // Hybrid Setup

@@ -1,4 +1,5 @@
 import type { HybridObject, Int64 } from 'react-native-nitro-modules'
+import type { NativeSmbListTask } from './NativeSmbListTask.nitro'
 import type { NativeSmbTask } from './NativeSmbTask.nitro'
 import type { SmbCredentials } from './types'
 
@@ -22,7 +23,7 @@ export interface ReactNativeSmb extends HybridObject<{ ios: 'c++'; android: 'c++
     maxDepth: number,
     includeSecurityDescriptor: boolean,
     batchSize: number,
-  ): NativeSmbTask
+  ): NativeSmbListTask
   getPathInfo(taskId: string, path: string): NativeSmbTask
   getSecurityDescriptor(taskId: string, path: string): NativeSmbTask
 

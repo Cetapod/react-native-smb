@@ -1,6 +1,7 @@
 #include "HybridSMB.hpp"
 
 #include "BridgeMapping.hpp"
+#include "HybridSmbListTask.hpp"
 
 #include <NitroModules/Promise.hpp>
 #include <stdexcept>
@@ -46,8 +47,7 @@ void HybridSMB::releaseTaskRun(const std::shared_ptr<TaskRunState>& state) {
 }
 
 template <typename OpT>
-std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp,
-                                                               ExecutionLane lane) {
+std::shared_ptr<SmbTask> HybridSMB::startTask(const std::string& taskId, std::unique_ptr<OpT> seedOp, ExecutionLane lane) {
     std::lock_guard<std::mutex> shutdownLock(shutdownMutex_);
     if (disposed_.load(std::memory_order_acquire)) {
         SmbException::raise(SmbErrorCode::NotConnected, "SMB client has been destroyed");
@@ -90,7 +90,13 @@ std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::createTask(const std::string
         throw;
     }
 
-    return std::make_shared<HybridSmbTask>(std::move(task));
+    return task;
+}
+
+template <typename OpT>
+std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp,
+                                                               ExecutionLane lane) {
+    return std::make_shared<HybridSmbTask>(startTask(taskId, std::move(seedOp), lane));
 }
 
 HybridSMB::HybridSMB() : HybridObject(TAG) {
@@ -185,8 +191,9 @@ std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::connectShare(const std::stri
 }
 
 // --- listing ---
-std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::listDirectory(const std::string& taskId, const std::string& path, double maxDepth, bool includeSecurityDescriptor, double batchSize) {
-    return createTask<react_native_smb::ListDirectoryOperator>(taskId, std::make_unique<react_native_smb::ListDirectoryOperator>(path, static_cast<int>(maxDepth), includeSecurityDescriptor, static_cast<int>(batchSize)));
+std::shared_ptr<HybridNativeSmbListTaskSpec> HybridSMB::listDirectory(const std::string& taskId, const std::string& path, double maxDepth, bool includeSecurityDescriptor, double batchSize) {
+    auto task = startTask(taskId, std::make_unique<react_native_smb::ListDirectoryOperator>(path, static_cast<int>(maxDepth), includeSecurityDescriptor, static_cast<int>(batchSize)));
+    return std::make_shared<HybridSmbListTask>(std::move(task));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::getPathInfo(const std::string& taskId, const std::string& path) {

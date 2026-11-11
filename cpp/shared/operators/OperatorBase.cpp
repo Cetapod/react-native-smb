@@ -55,7 +55,8 @@ void OperatorBase::publishResult(SmbTaskResult value) {
 }
 
 std::shared_ptr<EntryStream> OperatorBase::entryStream() const {
-    return ctx_.task ? ctx_.task->entryStream() : nullptr;
+    if (!ctx_.task) return nullptr;
+    return ctx_.task->entryStream();
 }
 
 }  // namespace react_native_smb

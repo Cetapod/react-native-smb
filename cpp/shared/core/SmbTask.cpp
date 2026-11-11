@@ -7,15 +7,15 @@
 #include "../util/SmbErrorMapper.hpp"
 #include "../util/SmbException.hpp"
 #include "EntryStream.hpp"
-#include "SmbModels.hpp"
 #include "TaskSnapshotCodec.hpp"
 
 namespace react_native_smb {
 
 SmbTask::SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool)
-    : SmbTaskCore(std::move(id), seedOp->kind()),
-      pool_(pool),
-      entries_(std::make_shared<EntryStream>()) {
+    : SmbTaskCore(std::move(id), seedOp->kind()), pool_(pool) {
+    if (seedOp->kind() == SmbOperatorKind::ListDirectory) {
+        entries_ = std::make_shared<EntryStream>();
+    }
     ops_.push_back(std::move(seedOp));
     opProgress_.resize(1);
 }
@@ -118,13 +118,5 @@ std::string SmbTask::subscribeMap(const std::function<void(const std::unordered_
         }
     });
 }
-
-std::string SmbTask::subscribeEntries(const EntriesListener& listener) {
-    return entries_->subscribe(listener);
-}
-
-void SmbTask::unsubscribeEntries(const std::string& id) { entries_->unsubscribe(id); }
-
-std::vector<SmbFileInfo> SmbTask::drainEntries(const std::string& id) { return entries_->drain(id); }
 
 }  // namespace react_native_smb

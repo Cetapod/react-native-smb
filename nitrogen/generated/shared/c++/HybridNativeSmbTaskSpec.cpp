@@ -18,8 +18,6 @@ namespace margelo::nitro::smb {
       prototype.registerHybridMethod("get", &HybridNativeSmbTaskSpec::get);
       prototype.registerHybridMethod("subscribe", &HybridNativeSmbTaskSpec::subscribe);
       prototype.registerHybridMethod("unsubscribe", &HybridNativeSmbTaskSpec::unsubscribe);
-      prototype.registerHybridMethod("subscribeEntries", &HybridNativeSmbTaskSpec::subscribeEntries);
-      prototype.registerHybridMethod("unsubscribeEntries", &HybridNativeSmbTaskSpec::unsubscribeEntries);
     });
   }
 

@@ -89,7 +89,7 @@ export class SmbClient {
   listDirectory(path: string, options: ListDirectoryOptions = {}): SmbListTask {
     const { maxDepth = 0, includeSecurityDescriptor = false, batchSize = DEFAULT_LIST_BATCH_SIZE } = options;
     const id = generateTaskId();
-    // drainEntries is a raw JSI method on every HybridSmbTask; list ops use NativeSmbListTask.
+    // drainEntries / getResultValue are raw JSI methods on HybridSmbListTask.
     return new SmbListTask(
       id,
       this.native.listDirectory(id, path, maxDepth, includeSecurityDescriptor, batchSize) as NativeSmbListTask,

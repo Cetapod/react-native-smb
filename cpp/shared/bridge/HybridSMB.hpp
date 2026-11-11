@@ -1,6 +1,8 @@
 #pragma once
 
+#include "HybridNativeSmbListTaskSpec.hpp"
 #include "HybridReactNativeSmbSpec.hpp"
+#include "HybridSmbListTask.hpp"
 #include "HybridSmbTask.hpp"
 
 #include "../connection/SmbConnectionPool.hpp"
@@ -55,6 +57,10 @@ class HybridSMB : public HybridReactNativeSmbSpec {
     enum class ExecutionLane { Shared, Lifecycle };
 
     template <typename OpT>
+    std::shared_ptr<react_native_smb::SmbTask> startTask(const std::string& taskId, std::unique_ptr<OpT> seedOp,
+                                                         ExecutionLane lane = ExecutionLane::Shared);
+
+    template <typename OpT>
     std::shared_ptr<HybridNativeSmbTaskSpec> createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp,
                                                         ExecutionLane lane = ExecutionLane::Shared);
 
@@ -74,7 +80,7 @@ class HybridSMB : public HybridReactNativeSmbSpec {
     std::shared_ptr<HybridNativeSmbTaskSpec> listShares(const std::string& taskId) override;
 
     // --- listing ---
-    std::shared_ptr<HybridNativeSmbTaskSpec> listDirectory(const std::string& taskId, const std::string& path, double maxDepth, bool includeSecurityDescriptor, double batchSize) override;
+    std::shared_ptr<HybridNativeSmbListTaskSpec> listDirectory(const std::string& taskId, const std::string& path, double maxDepth, bool includeSecurityDescriptor, double batchSize) override;
     std::shared_ptr<HybridNativeSmbTaskSpec> getPathInfo(const std::string& taskId, const std::string& path) override;
     std::shared_ptr<HybridNativeSmbTaskSpec> getSecurityDescriptor(const std::string& taskId, const std::string& path) override;
 
