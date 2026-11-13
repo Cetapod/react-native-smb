@@ -112,6 +112,7 @@ void SmbTaskCore::unsubscribe(const std::string& id) {
 }
 
 void SmbTaskCore::publishResult(SmbTaskResult value) {
+    std::lock_guard<std::mutex> lk(stateMutex_);
     if (settled_.load(std::memory_order_acquire)) return;
     resultValue_ = std::move(value);
 }
