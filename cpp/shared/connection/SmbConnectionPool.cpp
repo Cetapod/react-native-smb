@@ -97,7 +97,7 @@ void SmbConnectionPool::tryAssignNext() {
             if (!req) break;
 
             slotIdx = findIdleSlot(req->mode);
-            if (slotIdx == SIZE_MAX && canGrowPoolSlot(req->kind)) slotIdx = maybeGrowSlot();
+            if (slotIdx == SIZE_MAX) slotIdx = maybeGrowSlot();
             if (slotIdx == SIZE_MAX) {
                 queue_.requeueFront(std::move(req));
                 break;
@@ -397,11 +397,6 @@ void SmbConnectionPool::resetPool() {
     }
     SMB_LOG_INFO("Pool reset (%zu slot(s))", slotCount);
     notifyObservers();
-}
-
-std::vector<SmbShare> SmbConnectionPool::listShares(const std::string& taskId) {
-    auto handle = requestContext(AcquireMode::Interactive, SmbOperatorKind::ListShares, taskId);
-    return handle.manager().listShares(taskId);
 }
 
 bool SmbConnectionPool::isConnected() const {

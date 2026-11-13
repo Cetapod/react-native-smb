@@ -41,7 +41,6 @@ public:
     void connectShare(const std::string& share, const std::string& taskId = "", const CancellationToken& cancel = {});
     void disconnect(const std::string& taskId = "", const CancellationToken& cancel = {});
     void resetPool();
-    std::vector<SmbShare> listShares(const std::string& taskId = "");
 
     // [context]
     PoolContextHandle requestContext(AcquireMode mode, SmbOperatorKind kind, const std::string& taskId = "");
