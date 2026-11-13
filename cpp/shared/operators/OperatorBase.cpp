@@ -13,13 +13,6 @@ void OperatorBase::start(SmbTask* task, SmbConnectionPool* pool, const Cancellat
 
 std::string OperatorBase::owningTaskId() const { return ctx_.task ? ctx_.task->getId() : std::string(); }
 
-MetadataContextLease OperatorBase::makeMetadataLease() {
-    if (ctx_.task) ctx_.task->markPending();
-    MetadataContextLease lease(pool(), kind(), owningTaskId());
-    if (ctx_.task && !isCancelled()) ctx_.task->markRunning();
-    return lease;
-}
-
 PoolContextHandle OperatorBase::requestContext(AcquireMode mode) {
     if (ctx_.task) ctx_.task->markPending();
     PoolContextHandle handle = pool().requestContext(mode, kind(), owningTaskId());

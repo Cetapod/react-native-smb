@@ -20,13 +20,13 @@ void DuplicateItemOperator::run() {
     const std::string fileName = path_util::extractFileName(sourcePath);
     setSourceDestination(sourcePath, sourcePath);
 
-    MetadataContextLease lease = makeMetadataLease();
+    auto handle = requestContext(AcquireMode::Metadata);
     if (isCancelled()) {
         emitStatus(SmbTaskStatus::Cancelled);
         return;
     }
 
-    const CopyTreeSourceInfo source = inspectCopyTreeSource(lease, sourcePath, /*recursive=*/true, token);
+    const CopyTreeSourceInfo source = inspectCopyTreeSource(handle, sourcePath, /*recursive=*/true, token);
     constexpr int kMaxRootClaimRetries = 64;
 
     std::string destPath;
@@ -38,17 +38,17 @@ void DuplicateItemOperator::run() {
             return;
         }
 
-        lease.submitSync([&](smb2_context* ctx) {
+        handle.submitSync([&](smb2_context* ctx) {
             const std::string newName =
-                tree_ops::generateUniqueCopyName(ctx, lease.manager(), parentPath, fileName, token, nextNameIndex);
+                tree_ops::generateUniqueCopyName(ctx, handle.manager(), parentPath, fileName, token, nextNameIndex);
             destPath = path_util::buildUrl(parentPath, newName);
         });
 
         try {
             copyTreeImpl(
-                pool(), kind(), sourcePath, destPath, /*recursive=*/true, token,
+                handle, sourcePath, destPath, /*recursive=*/true, token,
                 [this](double done, double total) { emitProgress(done, total); },
-                [this](int64_t n) { addExpectedBytes(n); }, owningTaskId(), &lease, &source,
+                [this](int64_t n) { addExpectedBytes(n); }, &source,
                 [&] {
                     rootClaimed = true;
                     setSourceDestination(sourcePath, destPath);

@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "../connection/MetadataContextLease.hpp"
 #include "../connection/PoolContextHandle.hpp"
 #include "../connection/PoolTypes.hpp"
 #include "../core/CancellationToken.hpp"
@@ -39,7 +38,6 @@ class OperatorBase {
 
     SmbConnectionPool& pool() const { return *ctx_.pool; }
     PoolContextHandle requestContext(AcquireMode mode);
-    MetadataContextLease makeMetadataLease();
     std::string owningTaskId() const;
 
     void addExpectedBytes(int64_t bytes);
