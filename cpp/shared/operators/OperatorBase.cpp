@@ -5,8 +5,8 @@
 
 namespace react_native_smb {
 
-void OperatorBase::start(SmbTask* task, SmbConnectionPool* pool, const CancellationToken& cancel, size_t opIndex) {
-    setContext(OperatorContext{task, pool, cancel, opIndex});
+void OperatorBase::start(SmbTask* task, SmbConnectionPool* pool, const CancellationToken& cancel) {
+    setContext(OperatorContext{task, pool, cancel});
     if (cancel.cancelled()) return;
     run();
 }
@@ -31,15 +31,11 @@ void OperatorBase::emitStatus(SmbTaskStatus s, const std::string& error, int cod
     if (!ctx_.task) return;
     if (isCancelled() && s == SmbTaskStatus::Success) return;
     if (ctx_.task->getStatus() == SmbTaskStatus::Cancelled && s == SmbTaskStatus::Success) return;
-    ctx_.task->onOpStatus(ctx_.opIndex, s, error, code);
+    ctx_.task->onOpStatus(s, error, code);
 }
 
 void OperatorBase::emitProgress(double done, double total) {
-    if (ctx_.task) ctx_.task->onOpProgress(ctx_.opIndex, done, total);
-}
-
-size_t OperatorBase::spawn(std::vector<std::unique_ptr<OperatorBase>> moreOps) {
-    return ctx_.task ? ctx_.task->spawn(std::move(moreOps)) : 0;
+    if (ctx_.task) ctx_.task->onOpProgress(done, total);
 }
 
 void OperatorBase::addExpectedBytes(int64_t bytes) {

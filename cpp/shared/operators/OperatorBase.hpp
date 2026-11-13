@@ -28,7 +28,7 @@ class OperatorBase {
     virtual SmbOperatorKind kind() const = 0;
 
     void setContext(const OperatorContext& ctx) { ctx_ = ctx; }
-    void start(SmbTask* task, SmbConnectionPool* pool, const CancellationToken& cancel, size_t opIndex);
+    void start(SmbTask* task, SmbConnectionPool* pool, const CancellationToken& cancel);
 
    protected:
     void emitStatus(SmbTaskStatus s, const std::string& error = "", int code = 0);
@@ -42,7 +42,6 @@ class OperatorBase {
     MetadataContextLease makeMetadataLease();
     std::string owningTaskId() const;
 
-    size_t spawn(std::vector<std::unique_ptr<OperatorBase>> moreOps);
     void addExpectedBytes(int64_t bytes);
     void setSourceDestination(const std::string& source, const std::string& destination);
     void publishResult(SmbTaskResult value);

@@ -3,7 +3,6 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
-#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -16,8 +15,6 @@
 #include "SmbTypes.hpp"
 
 namespace react_native_smb {
-
-class OperatorBase;
 
 // Thread-safe state, result storage, and subscriber fan-out. No HybridObject,
 // no pool orchestration, no JSI.
@@ -37,8 +34,8 @@ class SmbTaskCore {
     void setPaths(std::string source, std::string destination);
     void addExpectedBytes(int64_t bytes);
 
-    void onOpStatus(size_t opIndex, SmbTaskStatus s, const std::string& error, int code);
-    void onOpProgress(size_t opIndex, double done, double total);
+    void onOpStatus(SmbTaskStatus s, const std::string& error, int code);
+    void onOpProgress(double done, double total);
 
     void publishResult(SmbTaskResult value);
     SmbTaskResult publishedResult() const;
@@ -46,25 +43,15 @@ class SmbTaskCore {
     std::string subscribe(SnapshotListener listener);
     void unsubscribe(const std::string& id);
 
-    std::future<void> completionFuture();
-
     void markPending();
     void markRunning();
 
    protected:
-    struct OpProgress {
-        int64_t done{0};
-        int64_t total{0};
-        SmbTaskStatus status{SmbTaskStatus::Idle};
-    };
-
-    std::vector<std::unique_ptr<OperatorBase>> ops_;
-    std::vector<OpProgress> opProgress_;
-    std::atomic<size_t> pending_{0};
     CancellationToken cancel_;
 
-    void onOpFinished();
     void settle(SmbTaskStatus finalStatus, const std::string& error, int code);
+    // Settles from the operator's outcome once it has returned.
+    void maybeSettle();
 
     static int64_t nowMs();
 
@@ -86,8 +73,9 @@ class SmbTaskCore {
     int64_t startedAt_{0};
     int64_t updatedAt_{0};
     int64_t endedAt_{0};
+    int64_t opDone_{0};
+    int64_t opTotal_{0};
 
-    std::promise<void> done_;
     std::atomic<bool> settled_{false};
 
     std::map<std::string, SnapshotListener> listeners_;
@@ -99,7 +87,6 @@ class SmbTaskCore {
     void writeToSnapshot(SmbTaskState& out) const;
     void notifyListeners();
     void recomputeAggregateLocked();
-    void maybeSettle();
 };
 
 }  // namespace react_native_smb

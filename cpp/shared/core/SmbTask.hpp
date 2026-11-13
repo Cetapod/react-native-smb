@@ -1,10 +1,7 @@
 #pragma once
 
-#include <cstdint>
-#include <future>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "SmbTaskCore.hpp"
 
@@ -13,15 +10,14 @@ namespace react_native_smb {
 class OperatorBase;
 class SmbConnectionPool;
 class EntryStream;
-struct SmbFileInfo;
 
-class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask> {
+class SmbTask : public SmbTaskCore {
    public:
-    SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool);
+    SmbTask(std::string id, std::unique_ptr<OperatorBase> op, std::shared_ptr<SmbConnectionPool> pool);
     ~SmbTask();
 
-    void start();
-    size_t spawn(std::vector<std::unique_ptr<OperatorBase>> moreOps);
+    // Runs the operator on the calling thread and settles the task.
+    void run();
 
     using SmbTaskCore::getState;
     using SmbTaskCore::subscribe;
@@ -32,14 +28,10 @@ class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask>
 
     const std::shared_ptr<EntryStream>& entryStream() const { return entries_; }
 
-    std::future<void> result() { return completionFuture(); }
-
    private:
+    std::unique_ptr<OperatorBase> op_;
     std::weak_ptr<SmbConnectionPool> pool_;
     std::shared_ptr<EntryStream> entries_;  // non-null only for ListDirectory
-
-    void launchOp(size_t opIndex);
-    size_t appendOps(std::vector<std::unique_ptr<OperatorBase>>& more);
 };
 
 }  // namespace react_native_smb

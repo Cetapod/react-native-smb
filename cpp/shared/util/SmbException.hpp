@@ -11,7 +11,7 @@
 namespace react_native_smb {
 
 // Typed native exception. Prefer throwing this at the error origin so
-// SmbTask::launchOp can settle with a stable SmbErrorCode instead of
+// SmbTask::run can settle with a stable SmbErrorCode instead of
 // re-guessing from message text.
 class SmbException : public std::runtime_error {
    public:

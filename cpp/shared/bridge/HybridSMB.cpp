@@ -72,7 +72,7 @@ std::shared_ptr<SmbTask> HybridSMB::startTask(const std::string& taskId, std::un
             std::shared_ptr<TaskRunState> state;
             ~RunCompletionGuard() { HybridSMB::releaseTaskRun(state); }
         } guard{taskRuns};
-        task->start();
+        task->run();
         self->forgetTask(taskId);
     };
 
