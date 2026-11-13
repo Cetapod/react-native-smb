@@ -1,5 +1,6 @@
 #include "SmbConnectionPool.hpp"
 
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -9,13 +10,9 @@
 namespace react_native_smb {
 
 namespace {
-bool fulfillRequest(const ContextRequestPtr& req, PoolContextHandle handle) {
-    if (!req || req->fulfilled.exchange(true, std::memory_order_acq_rel)) return false;
-    try {
-        req->promise.set_value(std::move(handle));
-        return true;
-    } catch (...) {
-        return false;
+void rejectRequests(const std::vector<ContextRequestPtr>& requests, SmbErrorCode code, const std::string& message) {
+    for (const auto& req : requests) {
+        if (req->callbacks.onRejected) req->callbacks.onRejected(static_cast<int>(code), message);
     }
 }
 }  // namespace
@@ -81,168 +78,139 @@ size_t SmbConnectionPool::maybeGrowSlot() {
 }
 
 void SmbConnectionPool::tryAssignNext() {
-    bool assigned = false;
-    for (;;) {
-        ContextRequestPtr req;
-        size_t slotIdx = SIZE_MAX;
-        bool needsActivate = false;
-        PoolConnectParams params;
-        std::string taskId;
-
-        {
-            std::unique_lock<std::mutex> lock(mutex_);
-            if (lifecycle_ != PoolLifecycle::Running) break;
-            queue_.removeCancelledFromHead();
-            req = queue_.takeNext();
+    std::vector<std::pair<ContextRequestPtr, size_t>> granted;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        while (lifecycle_ == PoolLifecycle::Running) {
+            ContextRequestPtr req = queue_.takeNext();
             if (!req) break;
-
-            slotIdx = findIdleSlot(req->mode);
-            if (slotIdx == SIZE_MAX && canGrowPoolSlot(req->kind)) slotIdx = maybeGrowSlot();
+            size_t slotIdx = findIdleSlot(req->mode);
+            if (slotIdx == SIZE_MAX) slotIdx = maybeGrowSlot();
             if (slotIdx == SIZE_MAX) {
                 queue_.requeueFront(std::move(req));
                 break;
             }
-
-            PoolSlot& slot = slots_[slotIdx];
-            if (!slot.accepts(req->mode)) {
-                queue_.requeueFront(std::move(req));
-                break;
-            }
-
-            slot.markActivating();
+            slots_[slotIdx].markActivating();
             activating_[req->id] = req;
-            params.serverUrl = serverUrl_;
-            params.shareName = shareName_;
-            params.credentials = credentials_;
-            params.capabilities = capabilities_;
-            needsActivate = slotNeedsActivate(slot);
-            taskId = req->taskId;
-
-            lock.unlock();
-
-            bool ok = true;
-            std::string activationError;
-            int activationCode = static_cast<int>(SmbErrorCode::NotConnected);
-            try {
-                if (needsActivate)
-                    slot.activate(params, taskId);
-                else
-                    slot.ensureShare(shareName_, taskId);
-            } catch (const SmbException& e) {
-                ok = false;
-                activationError = e.what();
-                activationCode = e.codeInt();
-            } catch (const std::exception& e) {
-                ok = false;
-                activationError = e.what();
-                activationCode = SmbErrorMapper::fromErrnoOrMessage(0, e.what());
-            } catch (...) {
-                ok = false;
-                activationError = "context request failed";
-                activationCode = static_cast<int>(SmbErrorCode::NotConnected);
-            }
-
-            lock.lock();
-            activating_.erase(req->id);
-
-            const bool wasCancelled = req->cancelled.load(std::memory_order_acquire);
-
-            if (lifecycle_ != PoolLifecycle::Running || wasCancelled) {
-                slot.resetBroken();
-                req->cancelled.store(true, std::memory_order_release);
-                fulfillRequest(req, PoolContextHandle{});
-                assignCv_.notify_all();
-                if (lifecycle_ != PoolLifecycle::Running) break;
-                continue;
-            }
-
-            if (!ok) {
-                SMB_LOG_ERROR("Pool could not activate a context for task %s (%s)", req->taskId.c_str(), operationName(req->kind));
-                slot.resetBroken();
-                req->errorMessage = activationError.empty() ? "context request failed" : std::move(activationError);
-                req->errorCode = activationCode;
-                fulfillRequest(req, PoolContextHandle{});
-                assignCv_.notify_all();
-                continue;
-            }
-
-            slot.assign(req->id, req->taskId, req->kind);
-            slot.manager()->setCapabilities(params.capabilities);
-            PoolContextHandle handle(this, slotIdx, slot.manager());
-            if (!fulfillRequest(req, std::move(handle))) {
-                // The unconsumed handle releases the slot when it leaves scope.
-                assignCv_.notify_all();
-                continue;
-            }
-            assigned = true;
+            granted.emplace_back(std::move(req), slotIdx);
         }
     }
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        assignCv_.notify_all();
-    }
-    if (assigned) notifyObservers();
+    if (granted.empty()) return;
+    notifyObservers();
+    for (auto& [req, slotIdx] : granted) req->callbacks.onGranted(SlotReservation(this, slotIdx, req));
 }
 
-PoolContextHandle SmbConnectionPool::requestContext(AcquireMode mode, SmbOperatorKind kind, const std::string& taskId) {
-    ContextRequestPtr req;
-    std::future<PoolContextHandle> fut;
+void SmbConnectionPool::requestContext(AcquireMode mode, SmbOperatorKind kind, const std::string& taskId, ContextCallbacks callbacks) {
+    bool accepted = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (lifecycle_ != PoolLifecycle::Running) {
-            SmbException::raise(SmbErrorCode::NotConnected, "SMB connection is closing or disconnected");
-        }
-        req = queue_.enqueue(mode, kind, taskId);
-        fut = req->promise.get_future();
+        accepted = lifecycle_ == PoolLifecycle::Running;
+        if (accepted) queue_.enqueue(mode, kind, taskId, std::move(callbacks));
+    }
+    if (!accepted) {
+        if (callbacks.onRejected) callbacks.onRejected(static_cast<int>(SmbErrorCode::NotConnected), "SMB connection is closing or disconnected");
+        return;
     }
     tryAssignNext();
+}
 
-    std::unique_lock<std::mutex> lock(mutex_);
-    assignCv_.wait(lock, [&] {
-        return req->fulfilled.load(std::memory_order_acquire) || req->cancelled.load(std::memory_order_acquire);
-    });
-
-    if (req->cancelled.load(std::memory_order_acquire)) {
-        SmbException::raise(SmbErrorCode::Cancelled, "context request cancelled");
+PoolContextHandle SmbConnectionPool::activateReservation(size_t slotIndex, const ContextRequestPtr& req) {
+    PoolSlot& slot = slots_[slotIndex];
+    PoolConnectParams params;
+    bool needsActivate = false;
+    bool live = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        live = lifecycle_ == PoolLifecycle::Running && !req->cancelled.load(std::memory_order_acquire);
+        params.serverUrl = serverUrl_;
+        params.shareName = shareName_;
+        params.credentials = credentials_;
+        params.capabilities = capabilities_;
+        needsActivate = slotNeedsActivate(slot);
     }
 
-    PoolContextHandle handle = fut.get();
-    if (!handle.valid()) {
-        const std::string msg = req->errorMessage.empty() ? "context request failed" : req->errorMessage;
-        SmbException::raise(req->errorCode == 0 ? static_cast<int>(SmbErrorCode::NotConnected) : req->errorCode, msg);
+    // The slot is Activating, so no other thread touches it while it connects unlocked.
+    std::optional<SmbException> failure;
+    if (live) {
+        try {
+            if (needsActivate)
+                slot.activate(params, req->taskId);
+            else
+                slot.ensureShare(params.shareName, req->taskId);
+        } catch (const SmbException& e) {
+            failure.emplace(e);
+        } catch (const std::exception& e) {
+            failure.emplace(static_cast<SmbErrorCode>(SmbErrorMapper::fromErrnoOrMessage(0, e.what())), e.what());
+        } catch (...) {
+            failure.emplace(SmbErrorCode::NotConnected, "context request failed");
+        }
     }
-    return handle;
+
+    std::optional<PoolContextHandle> handle;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        activating_.erase(req->id);
+        if (lifecycle_ != PoolLifecycle::Running || req->cancelled.load(std::memory_order_acquire)) {
+            if (failure) {
+                slot.resetBroken();
+            } else {
+                slot.release();
+            }
+            failure.emplace(SmbErrorCode::Cancelled, "context request cancelled");
+        } else if (failure) {
+            slot.resetBroken();
+        } else {
+            slot.assign(req->id, req->taskId, req->kind);
+            slot.manager()->setCapabilities(params.capabilities);
+            handle.emplace(this, slotIndex, slot.manager());
+        }
+        assignCv_.notify_all();
+    }
+    notifyObservers();
+
+    if (handle) return std::move(*handle);
+    if (failure->code() != SmbErrorCode::Cancelled) {
+        SMB_LOG_ERROR("Pool could not activate a context for task %s (%s)", req->taskId.c_str(), operationName(req->kind));
+    }
+    tryAssignNext();
+    throw *failure;
+}
+
+void SmbConnectionPool::abandonReservation(size_t slotIndex, const ContextRequestPtr& req) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        activating_.erase(req->id);
+        slots_[slotIndex].release();
+        assignCv_.notify_all();
+    }
+    notifyObservers();
+    tryAssignNext();
 }
 
 void SmbConnectionPool::releaseContext(const PoolContextHandle& handle) {
-    bool shouldAssign = false;
     bool released = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (handle.valid() && handle.slotIndex() < slots_.size()) {
-            const size_t idx = handle.slotIndex();
-            slots_[idx].release();
+            slots_[handle.slotIndex()].release();
             released = true;
         }
-        shouldAssign = lifecycle_ == PoolLifecycle::Running;
         assignCv_.notify_all();
     }
     if (released) notifyObservers();
-    if (shouldAssign) {
-        tryAssignNext();
-    }
+    tryAssignNext();
 }
 
 void SmbConnectionPool::cancelRequestsForTask(const std::string& taskId) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    queue_.cancelForTask(taskId);
-    for (auto& [id, req] : activating_) {
-        if (!req || req->taskId != taskId) continue;
-        if (req->fulfilled.load(std::memory_order_acquire)) continue;
-        req->cancelled.store(true, std::memory_order_release);
-        // Do not fulfill here — tryAssignNext owns the promise once activation returns.
+    std::vector<ContextRequestPtr> rejected;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        rejected = queue_.takeForTask(taskId);
+        for (auto& [id, req] : activating_) {
+            if (req->taskId == taskId) req->cancelled.store(true, std::memory_order_release);
+        }
     }
-    assignCv_.notify_all();
+    rejectRequests(rejected, SmbErrorCode::Cancelled, "context request cancelled");
 }
 
 size_t SmbConnectionPool::addObserver(const PoolObserver& observer) {
@@ -267,12 +235,13 @@ std::vector<PoolSlotInfo> SmbConnectionPool::getPoolStatus() const {
 
 void SmbConnectionPool::drainCurrentWork(const std::string& excludeTaskId, const CancellationToken& cancel) {
     if (cancel.cancelled()) SmbException::raise(SmbErrorCode::Cancelled, "connection transition cancelled");
+    std::vector<ContextRequestPtr> rejected;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         lifecycle_ = PoolLifecycle::Closing;
-        queue_.cancelAll();
-        assignCv_.notify_all();
+        rejected = queue_.takeAll();
     }
+    rejectRequests(rejected, SmbErrorCode::Cancelled, "context request cancelled");
     if (cancelTasksExcept_) cancelTasksExcept_(excludeTaskId);
     std::unique_lock<std::mutex> lock(mutex_);
     assignCv_.wait(lock, [&] {
@@ -397,11 +366,6 @@ void SmbConnectionPool::resetPool() {
     }
     SMB_LOG_INFO("Pool reset (%zu slot(s))", slotCount);
     notifyObservers();
-}
-
-std::vector<SmbShare> SmbConnectionPool::listShares(const std::string& taskId) {
-    auto handle = requestContext(AcquireMode::Interactive, SmbOperatorKind::ListShares, taskId);
-    return handle.manager().listShares(taskId);
 }
 
 bool SmbConnectionPool::isConnected() const {

@@ -5,6 +5,7 @@
 
 #include <NitroModules/Promise.hpp>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 #include "../connection/PoolTypes.hpp"
@@ -29,6 +30,7 @@
 
 namespace margelo::nitro::smb {
 
+using react_native_smb::SlotReservation;
 using react_native_smb::SmbTask;
 using DomainTaskState = react_native_smb::SmbTaskState;
 using DomainPoolSlotInfo = react_native_smb::PoolSlotInfo;
@@ -44,14 +46,13 @@ void HybridSMB::releaseTaskRun(const std::shared_ptr<TaskRunState>& state) {
     state->cv.notify_all();
 }
 
-template <typename OpT>
-std::shared_ptr<SmbTask> HybridSMB::startTask(const std::string& taskId, std::unique_ptr<OpT> seedOp, ExecutionLane lane) {
+std::shared_ptr<SmbTask> HybridSMB::startTask(const std::string& taskId, std::unique_ptr<react_native_smb::OperatorBase> op) {
     std::lock_guard<std::mutex> shutdownLock(shutdownMutex_);
     if (disposed_.load(std::memory_order_acquire)) {
         SmbException::raise(SmbErrorCode::NotConnected, "SMB client has been destroyed");
     }
 
-    auto task = std::make_shared<SmbTask>(taskId, std::move(seedOp), pool_);
+    auto task = std::make_shared<SmbTask>(taskId, std::move(op), pool_);
     if (observer_) {
         observer_->track(task);
     }
@@ -65,36 +66,53 @@ std::shared_ptr<SmbTask> HybridSMB::startTask(const std::string& taskId, std::un
         std::lock_guard<std::mutex> lock(taskRuns->mutex);
         ++taskRuns->active;
     }
-
-    auto* self = this;
-    auto runBody = [self, task, taskId, taskRuns] {
-        struct RunCompletionGuard {
-            std::shared_ptr<TaskRunState> state;
-            ~RunCompletionGuard() { HybridSMB::releaseTaskRun(state); }
-        } guard{taskRuns};
-        task->start();
+    // Runs once per task, after it settles on any path.
+    auto finish = [self = this, taskId, taskRuns] {
         self->forgetTask(taskId);
+        releaseTaskRun(taskRuns);
     };
 
-    try {
-        if (lane == ExecutionLane::Lifecycle) {
-            lifecycleExecutor_.post(std::move(runBody));
-        } else {
-            (void)Promise<void>::async(std::move(runBody));
-        }
-    } catch (...) {
-        releaseTaskRun(taskRuns);
-        forgetTask(taskId);
-        throw;
+    if (!task->prepare()) {
+        finish();
+        return task;
     }
 
+    const auto mode = task->acquireMode();
+    if (!mode) {
+        try {
+            lifecycleExecutor_.post([task, finish] {
+                task->run(std::nullopt);
+                finish();
+            });
+        } catch (...) {
+            finish();
+            throw;
+        }
+        return task;
+    }
+
+    task->markPending();
+    pool_->requestContext(*mode, task->getKind(), taskId,
+                          {[task, finish](SlotReservation reservation) {
+                               try {
+                                   std::thread([task, finish, reservation = std::move(reservation)]() mutable {
+                                       task->run(std::move(reservation));
+                                       finish();
+                                   }).detach();
+                               } catch (const std::exception& e) {
+                                   task->reject(static_cast<int>(SmbErrorCode::Unknown), e.what());
+                                   finish();
+                               }
+                           },
+                           [task, finish](int code, const std::string& message) {
+                               task->reject(code, message);
+                               finish();
+                           }});
     return task;
 }
 
-template <typename OpT>
-std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp,
-                                                               ExecutionLane lane) {
-    return std::make_shared<HybridSmbTask>(startTask(taskId, std::move(seedOp), lane));
+std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::createTask(const std::string& taskId, std::unique_ptr<react_native_smb::OperatorBase> op) {
+    return std::make_shared<HybridSmbTask>(startTask(taskId, std::move(op)));
 }
 
 HybridSMB::HybridSMB() : HybridObject(TAG) {
@@ -169,23 +187,23 @@ bool HybridSMB::isInitialized() { return pool_->isInitialized(); }
 
 // --- connection ---
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::initialize(const std::string& taskId, const std::string& url, const SmbCredentials& credentials) {
-    return createTask<react_native_smb::InitializeOperator>(taskId, std::make_unique<react_native_smb::InitializeOperator>(url, fromBridge(credentials)), ExecutionLane::Lifecycle);
+    return createTask(taskId, std::make_unique<react_native_smb::InitializeOperator>(url, fromBridge(credentials)));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::connect(const std::string& taskId, const std::string& url, const SmbCredentials& credentials) {
-    return createTask<react_native_smb::ConnectOperator>(taskId, std::make_unique<react_native_smb::ConnectOperator>(url, fromBridge(credentials)), ExecutionLane::Lifecycle);
+    return createTask(taskId, std::make_unique<react_native_smb::ConnectOperator>(url, fromBridge(credentials)));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::disconnect(const std::string& taskId) {
-    return createTask<react_native_smb::DisconnectOperator>(taskId, std::make_unique<react_native_smb::DisconnectOperator>(), ExecutionLane::Lifecycle);
+    return createTask(taskId, std::make_unique<react_native_smb::DisconnectOperator>());
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::listShares(const std::string& taskId) {
-    return createTask<react_native_smb::ListSharesOperator>(taskId, std::make_unique<react_native_smb::ListSharesOperator>());
+    return createTask(taskId, std::make_unique<react_native_smb::ListSharesOperator>());
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::connectShare(const std::string& taskId, const std::string& share) {
-    return createTask<react_native_smb::ConnectShareOperator>(taskId, std::make_unique<react_native_smb::ConnectShareOperator>(share), ExecutionLane::Lifecycle);
+    return createTask(taskId, std::make_unique<react_native_smb::ConnectShareOperator>(share));
 }
 
 // --- listing ---
@@ -195,45 +213,45 @@ std::shared_ptr<HybridNativeSmbListTaskSpec> HybridSMB::listDirectory(const std:
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::getPathInfo(const std::string& taskId, const std::string& path) {
-    return createTask<react_native_smb::GetPathInfoOperator>(taskId, std::make_unique<react_native_smb::GetPathInfoOperator>(path));
+    return createTask(taskId, std::make_unique<react_native_smb::GetPathInfoOperator>(path));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::getSecurityDescriptor(const std::string& taskId, const std::string& path) {
-    return createTask<react_native_smb::GetSecurityDescriptorOperator>(taskId, std::make_unique<react_native_smb::GetSecurityDescriptorOperator>(path));
+    return createTask(taskId, std::make_unique<react_native_smb::GetSecurityDescriptorOperator>(path));
 }
 
 // --- transfer ---
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::downloadFile(const std::string& taskId, const std::string& remotePath, const std::string& localPath) {
-    return createTask<react_native_smb::DownloadFileOperator>(taskId, std::make_unique<react_native_smb::DownloadFileOperator>(remotePath, localPath));
+    return createTask(taskId, std::make_unique<react_native_smb::DownloadFileOperator>(remotePath, localPath));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::uploadFile(const std::string& taskId, const std::string& localPath, const std::string& remotePath) {
-    return createTask<react_native_smb::UploadFileOperator>(taskId, std::make_unique<react_native_smb::UploadFileOperator>(localPath, remotePath));
+    return createTask(taskId, std::make_unique<react_native_smb::UploadFileOperator>(localPath, remotePath));
 }
 
 // --- mutate ---
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::createDirectory(const std::string& taskId, const std::string& path) {
-    return createTask<react_native_smb::CreateDirectoryOperator>(taskId, std::make_unique<react_native_smb::CreateDirectoryOperator>(path));
+    return createTask(taskId, std::make_unique<react_native_smb::CreateDirectoryOperator>(path));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::deleteItem(const std::string& taskId, const std::string& path) {
-    return createTask<react_native_smb::DeleteItemOperator>(taskId, std::make_unique<react_native_smb::DeleteItemOperator>(path));
+    return createTask(taskId, std::make_unique<react_native_smb::DeleteItemOperator>(path));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::moveItem(const std::string& taskId, const std::string& fromPath, const std::string& toPath) {
-    return createTask<react_native_smb::MoveItemOperator>(taskId, std::make_unique<react_native_smb::MoveItemOperator>(fromPath, toPath));
+    return createTask(taskId, std::make_unique<react_native_smb::MoveItemOperator>(fromPath, toPath));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::renameItem(const std::string& taskId, const std::string& currentPath, const std::string& newName) {
-    return createTask<react_native_smb::RenameItemOperator>(taskId, std::make_unique<react_native_smb::RenameItemOperator>(currentPath, newName));
+    return createTask(taskId, std::make_unique<react_native_smb::RenameItemOperator>(currentPath, newName));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::copyItem(const std::string& taskId, const std::string& fromPath, const std::string& toPath, bool recursive) {
-    return createTask<react_native_smb::CopyItemOperator>(taskId, std::make_unique<react_native_smb::CopyItemOperator>(fromPath, toPath, recursive));
+    return createTask(taskId, std::make_unique<react_native_smb::CopyItemOperator>(fromPath, toPath, recursive));
 }
 
 std::shared_ptr<HybridNativeSmbTaskSpec> HybridSMB::duplicateItem(const std::string& taskId, const std::string& path) {
-    return createTask<react_native_smb::DuplicateItemOperator>(taskId, std::make_unique<react_native_smb::DuplicateItemOperator>(path));
+    return createTask(taskId, std::make_unique<react_native_smb::DuplicateItemOperator>(path));
 }
 
 // --- tasks ---

@@ -6,13 +6,11 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
 #include "../core/SmbModels.hpp"
-#include "../connection/MetadataContextLease.hpp"
-#include "../connection/SmbConnectionPool.hpp"
+#include "../connection/PoolContextHandle.hpp"
 #include "../core/CancellationToken.hpp"
 #include "../core/SmbEnums.hpp"
 #include "../util/SmbException.hpp"
@@ -59,10 +57,10 @@ inline int64_t totalFileSize(const std::vector<SmbFileInfo>& entries) {
 }
 }  // namespace copy_tree_detail
 
-inline CopyTreeSourceInfo inspectCopyTreeSource(MetadataContextLease& lease, const std::string& fromPath,
+inline CopyTreeSourceInfo inspectCopyTreeSource(PoolContextHandle& context, const std::string& fromPath,
                                                 bool recursive, const CancellationToken& cancel) {
     CopyTreeSourceInfo source;
-    lease.submitSync([&](smb2_context* ctx) {
+    context.submitSync([&](smb2_context* ctx) {
         const std::string normalizedPath = path_util::normalized(fromPath);
         smb2_stat_64 st{};
         const int result = smb2_stat(ctx, normalizedPath.c_str(), &st);
@@ -80,17 +78,16 @@ inline CopyTreeSourceInfo inspectCopyTreeSource(MetadataContextLease& lease, con
         listing::DirectoryListOptions options;
         options.maxDepth = -1;
         options.countChildren = false;
-        source.entries = listing::listOnCtx(ctx, lease.manager(), fromPath, options, cancel);
+        source.entries = listing::listOnCtx(ctx, context.manager(), fromPath, options, cancel);
         source.totalSize = copy_tree_detail::totalFileSize(source.entries);
     });
     return source;
 }
 
-inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const std::string& fromPath,
-                         const std::string& toPath, bool recursive, const CancellationToken& cancel,
+inline void copyTreeImpl(PoolContextHandle& context, const std::string& fromPath, const std::string& toPath,
+                         bool recursive, const CancellationToken& cancel,
                          const std::function<void(double, double)>& onProgress,
-                         const std::function<void(int64_t)>& onExpectedBytes, const std::string& taskId = "",
-                         MetadataContextLease* sharedLease = nullptr,
+                         const std::function<void(int64_t)>& onExpectedBytes,
                          const CopyTreeSourceInfo* preparedSource = nullptr,
                          const std::function<void()>& onRootClaimed = {}) {
     const std::string normFrom = path_util::normalized(fromPath);
@@ -99,14 +96,8 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         SmbException::raise(SmbErrorCode::InvalidArgument, "Copy Failed: destination cannot be inside the source directory");
     }
 
-    std::optional<MetadataContextLease> ownedLease;
-    if (!sharedLease) {
-        ownedLease.emplace(pool, kind, taskId);
-        sharedLease = &*ownedLease;
-    }
-
     CopyTreeSourceInfo inspected;
-    if (!preparedSource) inspected = inspectCopyTreeSource(*sharedLease, fromPath, recursive, cancel);
+    if (!preparedSource) inspected = inspectCopyTreeSource(context, fromPath, recursive, cancel);
     const CopyTreeSourceInfo& source = preparedSource ? *preparedSource : inspected;
 
     auto totalBytesCopied = std::make_shared<int64_t>(0);
@@ -126,8 +117,8 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         if (cancel.cancelled()) {
             SmbException::raise(SmbErrorCode::Cancelled, "Copy cancelled");
         }
-        sharedLease->submitSync([&](smb2_context* ctx) {
-            smbCopyFileAsync(ctx, sharedLease->manager(), normFrom, normTo, totalBytesCopied, source.totalSize,
+        context.submitSync([&](smb2_context* ctx) {
+            smbCopyFileAsync(ctx, context.manager(), normFrom, normTo, totalBytesCopied, source.totalSize,
                              onProgress, cancel, rootClaimed);
         });
         if (onProgress) {
@@ -138,7 +129,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
 
     std::vector<copy_tree_detail::CopyJob> files;
     const std::string normToRoot = normTo;
-    sharedLease->submitSync([&](smb2_context* ctx) {
+    context.submitSync([&](smb2_context* ctx) {
         if (cancel.cancelled()) {
             SmbException::raise(SmbErrorCode::Cancelled, "Copy cancelled");
         }
@@ -159,7 +150,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         copy_tree_detail::collectFiles(source.entries, toPath, files);
 
         // Folders in parallel; each one's subfolders once it exists.
-        PipelinedOps ops(ctx, sharedLease->manager(), cancel, copy_tree_detail::kMaxFoldersInFlight, "Copy Failed");
+        PipelinedOps ops(ctx, context.manager(), cancel, copy_tree_detail::kMaxFoldersInFlight, "Copy Failed");
         std::function<void(const std::vector<SmbFileInfo>&, const std::string&)> createFolders =
             [&](const std::vector<SmbFileInfo>& items, const std::string& dstDir) {
                 for (const auto& item : items) {
@@ -191,8 +182,8 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
     }
 
     const auto copyOne = [&](const copy_tree_detail::CopyJob& job) {
-        sharedLease->submitSync([&](smb2_context* ctx) {
-            smbCopyFileAsync(ctx, sharedLease->manager(), path_util::normalized(job.src),
+        context.submitSync([&](smb2_context* ctx) {
+            smbCopyFileAsync(ctx, context.manager(), path_util::normalized(job.src),
                              path_util::normalized(job.dst), totalBytesCopied, source.totalSize, onProgress, cancel);
         });
     };
@@ -210,7 +201,7 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         return;
     }
 
-    if (sharedLease->manager().capabilities().serverSideCopyUnsupported.load()) {
+    if (context.manager().capabilities().serverSideCopyUnsupported.load()) {
         for (const auto& job : files) {
             if (cancel.cancelled()) break;
             copyOne(job);
@@ -219,8 +210,8 @@ inline void copyTreeImpl(SmbConnectionPool& pool, SmbOperatorKind kind, const st
         std::vector<detail::FileCopyJob> jobs;
         jobs.reserve(files.size());
         for (const auto& job : files) jobs.push_back({path_util::normalized(job.src), path_util::normalized(job.dst)});
-        sharedLease->submitSync([&](smb2_context* ctx) {
-            detail::copyFilesServerSide(ctx, sharedLease->manager(), jobs, copy_tree_detail::kMaxFilesInFlight, totalBytesCopied,
+        context.submitSync([&](smb2_context* ctx) {
+            detail::copyFilesServerSide(ctx, context.manager(), jobs, copy_tree_detail::kMaxFilesInFlight, totalBytesCopied,
                                         source.totalSize, onProgress, cancel);
         });
     }

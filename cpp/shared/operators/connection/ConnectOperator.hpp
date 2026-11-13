@@ -12,6 +12,7 @@ class ConnectOperator : public Operator<SmbConnectionInfo> {
     ConnectOperator(std::string url, SmbCredentials credentials) : url_(std::move(url)), credentials_(std::move(credentials)) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::Connect; }
+    std::optional<AcquireMode> acquireMode() const override { return std::nullopt; }
     void run() override;
 
    private:

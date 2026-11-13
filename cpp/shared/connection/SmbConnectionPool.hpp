@@ -15,6 +15,7 @@
 #include "PoolContextHandle.hpp"
 #include "PoolSlot.hpp"
 #include "PoolTypes.hpp"
+#include "SlotReservation.hpp"
 #include "SmbConnection.hpp"
 
 namespace react_native_smb {
@@ -25,7 +26,10 @@ namespace react_native_smb {
  *   slot[0]       — Interactive-only
  *   slot[1..N-1]  — General (any AcquireMode; Interactive may overflow here)
  *
- *   Op::requestContext → Interactive-first FIFO queue → exclusive slot assignment
+ *   requestContext → Interactive-first FIFO queue → SlotReservation → activate → PoolContextHandle
+ *
+ * Requests never block: a queued request holds no thread, and the caller's
+ * onGranted starts the work once a slot is reserved.
  */
 class SmbConnectionPool {
 public:
@@ -41,10 +45,10 @@ public:
     void connectShare(const std::string& share, const std::string& taskId = "", const CancellationToken& cancel = {});
     void disconnect(const std::string& taskId = "", const CancellationToken& cancel = {});
     void resetPool();
-    std::vector<SmbShare> listShares(const std::string& taskId = "");
 
     // [context]
-    PoolContextHandle requestContext(AcquireMode mode, SmbOperatorKind kind, const std::string& taskId = "");
+    // Queues a request and returns at once. Rejects immediately unless the pool is running.
+    void requestContext(AcquireMode mode, SmbOperatorKind kind, const std::string& taskId, ContextCallbacks callbacks);
     void releaseContext(const PoolContextHandle& handle);
     void cancelRequestsForTask(const std::string& taskId);
 
@@ -65,6 +69,8 @@ public:
     void removeObserver(size_t id);
 
 private:
+    friend class SlotReservation;
+
     enum class PoolLifecycle { Running, Closing, Disconnected };
 
     // Request scheduling
@@ -72,6 +78,8 @@ private:
     size_t findIdleSlot(AcquireMode mode) const;
     size_t maybeGrowSlot();
     bool slotNeedsActivate(const PoolSlot& slot) const;
+    PoolContextHandle activateReservation(size_t slotIndex, const ContextRequestPtr& req);
+    void abandonReservation(size_t slotIndex, const ContextRequestPtr& req);
 
     // Lifecycle
     void drainCurrentWork(const std::string& excludeTaskId, const CancellationToken& cancel);
@@ -98,7 +106,7 @@ private:
 
     // Pending context requests
     ContextRequestQueue queue_;
-    // Requests outside queue_ while a slot is activating. Cancellation must see them.
+    // Reserved requests whose slot is activating. Cancellation must see them.
     std::unordered_map<uint64_t, ContextRequestPtr> activating_;
 
     // Connection configuration

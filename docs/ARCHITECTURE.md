@@ -6,7 +6,7 @@
 TCP → NEGOTIATE → SESSION SETUP → TREE CONNECT
 ```
 
-Tasks call `requestContext(mode)`, hold a slot for the operator's lifetime, then release via `PoolContextHandle`. One operator per slot (mutex on the context). Work on different slots runs concurrently.
+Each task is granted one slot before its operator runs, holds it for the operator's lifetime, then releases it via `PoolContextHandle`. One operator per slot (mutex on the context). Work on different slots runs concurrently.
 
 From `SmbConnectionPool.hpp`:
 
@@ -20,13 +20,6 @@ slot[1..N-1]  — General (any AcquireMode; Interactive may overflow here)
 | `slot[0]` | `Interactive` only | `listDirectory`, `getPathInfo`, rename, move |
 | `slot[1..3]` | Any | Download, upload, copy, delete; grows on demand |
 
-```cpp
-bool PoolSlot::accepts(AcquireMode mode) const {
-    if (index_ == 0) return mode == AcquireMode::Interactive;
-    return true;
-}
-```
-
 Metadata never uses slot 0. Interactive work can overflow to slots 1–3 when slot 0 is busy.
 
 ### Acquire modes
@@ -36,7 +29,24 @@ Metadata never uses slot 0. Interactive work can overflow to slots 1–3 when sl
 | `Interactive` | `getPathInfo`, `listDirectory` (`maxDepth: 0`), `moveItem`, `renameItem`, `createDirectory`, `getSecurityDescriptor`, `listShares` |
 | `Metadata` | `downloadFile`, `uploadFile`, `copyItem`, `duplicateItem`, `deleteItem`, `listDirectory` (`maxDepth != 0`) |
 
-FIFO queue per mode.
+FIFO queue per mode; queued Interactive requests are assigned before Metadata. Every request may open a new slot up to the pool size.
+
+### Task admission
+
+The pool queue is the only place a work task waits. Starting a task does not block the calling thread or use Nitro's `Promise::async` pool:
+
+```
+JS call → prepare()              validate arguments, record paths (no SMB)
+        → requestContext(mode)   queue; status Pending
+        → slot reserved          start one thread for the task
+        → activate()             connect the slot if needed, on that thread
+        → run()                  status Running; slot released when it returns
+```
+
+- A queued task holds no thread. At most one thread per pool slot runs work, plus the lifecycle thread.
+- A task acquires exactly one slot, once, before `run()`; operators never request another one.
+- `initialize`, `connect`, `connectShare`, and `disconnect` take no slot. They run one at a time on a dedicated lifecycle thread, so they never wait behind queued work; a transition cancels queued and running tasks before it changes the connection.
+- Cancelling a queued task settles it at once without starting a thread. Grant and rejection callbacks run outside the pool lock.
 
 The server sees each active slot as a separate client connection — multiple full sessions to the same host/share, not channels bound to one session. SMB3 multichannel is the protocol-level alternative: extra TCP links attach to an existing session via `SMB2_SESSION_FLAG_BINDING` and share one `SessionId`. libsmb2 does not implement that; each `smb2_context` maps to one `fd`, so the pool uses independent contexts instead.
 

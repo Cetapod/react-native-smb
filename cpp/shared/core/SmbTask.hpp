@@ -1,11 +1,11 @@
 #pragma once
 
-#include <cstdint>
-#include <future>
 #include <memory>
+#include <optional>
 #include <string>
-#include <vector>
 
+#include "../connection/PoolTypes.hpp"
+#include "../connection/SlotReservation.hpp"
 #include "SmbTaskCore.hpp"
 
 namespace react_native_smb {
@@ -13,15 +13,20 @@ namespace react_native_smb {
 class OperatorBase;
 class SmbConnectionPool;
 class EntryStream;
-struct SmbFileInfo;
 
-class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask> {
+class SmbTask : public SmbTaskCore {
    public:
-    SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool);
+    SmbTask(std::string id, std::unique_ptr<OperatorBase> op, std::shared_ptr<SmbConnectionPool> pool);
     ~SmbTask();
 
-    void start();
-    size_t spawn(std::vector<std::unique_ptr<OperatorBase>> moreOps);
+    // Binds the operator and runs its prepare step. False when that settled the task.
+    bool prepare();
+    std::optional<AcquireMode> acquireMode() const;
+    // Activates the reserved slot (none for lifecycle tasks), runs the operator
+    // on the calling thread, and settles the task.
+    void run(std::optional<SlotReservation> reservation);
+    // Settles a task whose slot request was rejected.
+    void reject(int code, const std::string& message);
 
     using SmbTaskCore::getState;
     using SmbTaskCore::subscribe;
@@ -32,14 +37,13 @@ class SmbTask : public SmbTaskCore, public std::enable_shared_from_this<SmbTask>
 
     const std::shared_ptr<EntryStream>& entryStream() const { return entries_; }
 
-    std::future<void> result() { return completionFuture(); }
-
    private:
+    std::unique_ptr<OperatorBase> op_;
     std::weak_ptr<SmbConnectionPool> pool_;
     std::shared_ptr<EntryStream> entries_;  // non-null only for ListDirectory
 
-    void launchOp(size_t opIndex);
-    size_t appendOps(std::vector<std::unique_ptr<OperatorBase>>& more);
+    // Call from a catch block: settles from the in-flight exception.
+    void settleFromCurrentException();
 };
 
 }  // namespace react_native_smb

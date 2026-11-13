@@ -9,8 +9,8 @@
 namespace react_native_smb {
 
 // Single-worker FIFO queue for connection lifecycle tasks (initialize / connect /
-// connectShare / disconnect). Keeps those transitions off Nitro's shared
-// Promise::async pool so bulk Metadata work cannot starve logout/reconnect.
+// connectShare / disconnect). They need no pool slot, so they never queue behind
+// bulk work waiting for one; the task runs inline on this worker.
 class LifecycleSerialExecutor {
    public:
     LifecycleSerialExecutor();

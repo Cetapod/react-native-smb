@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <chrono>
 
-#include "../operators/OperatorBase.hpp"
 #include "../util/SmbErrorMapper.hpp"
 #include "../util/SmbLog.hpp"
 
@@ -76,12 +75,11 @@ void SmbTaskCore::addExpectedBytes(int64_t bytes) {
     notifyListeners();
 }
 
-void SmbTaskCore::onOpStatus(size_t opIndex, SmbTaskStatus s, const std::string& error, int code) {
+void SmbTaskCore::onOpStatus(SmbTaskStatus s, const std::string& error, int code) {
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
         if (settled_.load(std::memory_order_acquire)) return;
         if (status_.load() == SmbTaskStatus::Cancelled && s == SmbTaskStatus::Success) return;
-        if (opIndex < opProgress_.size()) opProgress_[opIndex].status = s;
         if (s == SmbTaskStatus::Error && status_.load() != SmbTaskStatus::Error) {
             errorMessage_ = error;
             errorCode_ = code;
@@ -90,14 +88,12 @@ void SmbTaskCore::onOpStatus(size_t opIndex, SmbTaskStatus s, const std::string&
     notifyListeners();
 }
 
-void SmbTaskCore::onOpProgress(size_t opIndex, double done, double total) {
+void SmbTaskCore::onOpProgress(double done, double total) {
     {
         std::lock_guard<std::mutex> lk(stateMutex_);
         if (settled_.load(std::memory_order_acquire)) return;
-        if (opIndex < opProgress_.size()) {
-            opProgress_[opIndex].done = static_cast<int64_t>(done);
-            opProgress_[opIndex].total = static_cast<int64_t>(total);
-        }
+        opDone_ = static_cast<int64_t>(done);
+        opTotal_ = static_cast<int64_t>(total);
         recomputeAggregateLocked();
     }
     notifyListeners();
@@ -116,6 +112,7 @@ void SmbTaskCore::unsubscribe(const std::string& id) {
 }
 
 void SmbTaskCore::publishResult(SmbTaskResult value) {
+    std::lock_guard<std::mutex> lk(stateMutex_);
     if (settled_.load(std::memory_order_acquire)) return;
     resultValue_ = std::move(value);
 }
@@ -124,8 +121,6 @@ SmbTaskResult SmbTaskCore::publishedResult() const {
     std::lock_guard<std::mutex> lk(stateMutex_);
     return resultValue_;
 }
-
-std::future<void> SmbTaskCore::completionFuture() { return done_.get_future(); }
 
 void SmbTaskCore::markPending() {
     {
@@ -149,22 +144,14 @@ void SmbTaskCore::markRunning() {
     notifyListeners();
 }
 
-void SmbTaskCore::onOpFinished() {
-    const size_t before = pending_.fetch_sub(1);
-    if (before == 1) maybeSettle();
-}
-
 void SmbTaskCore::recomputeAggregateLocked() {
     updatedAt_ = nowMs();
     if (!isDeterminate(kind_)) {
         progress_ = 0.0;
         return;
     }
-    int64_t d = 0, t = 0;
-    for (const auto& p : opProgress_) {
-        d += p.done;
-        t += p.total;
-    }
+    const int64_t d = opDone_;
+    const int64_t t = opTotal_;
     bytesDone_ = d;
     const int64_t denom = std::max<int64_t>(t, std::max<int64_t>(d, totalBytes_.load()));
     totalBytes_ = denom;
@@ -226,7 +213,6 @@ void SmbTaskCore::maybeSettle() {
                 endedAt_ = nowMs();
             }
             notifyListeners();
-            done_.set_value();
         }
         return;
     }
@@ -273,7 +259,6 @@ void SmbTaskCore::settle(SmbTaskStatus finalStatus, const std::string& error, in
         SMB_LOG_INFO("Task %s (%s) completed", id_.c_str(), operationName(kind_));
     }
     notifyListeners();
-    done_.set_value();
 }
 
 }  // namespace react_native_smb

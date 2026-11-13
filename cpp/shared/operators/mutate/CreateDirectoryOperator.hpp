@@ -11,6 +11,7 @@ class CreateDirectoryOperator : public OperatorBase {
     explicit CreateDirectoryOperator(std::string path) : path_(std::move(path)) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::CreateDirectory; }
+    std::optional<AcquireMode> acquireMode() const override { return AcquireMode::Interactive; }
     void run() override;
 
    private:

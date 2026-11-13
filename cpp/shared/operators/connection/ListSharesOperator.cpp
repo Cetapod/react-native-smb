@@ -1,11 +1,12 @@
 #include "ListSharesOperator.hpp"
 
-#include "../../connection/SmbConnectionPool.hpp"
+#include "../../connection/SmbConnection.hpp"
 
 namespace react_native_smb {
 
 void ListSharesOperator::run() {
-    result_ = pool().listShares(owningTaskId());
+    auto& handle = context();
+    result_ = handle.manager().listShares(owningTaskId());
     publishThisResult();
     emitStatus(SmbTaskStatus::Success);
 }

@@ -1,7 +1,5 @@
 #include "SmbTask.hpp"
 
-#include <thread>
-
 #include "../connection/SmbConnectionPool.hpp"
 #include "../operators/OperatorBase.hpp"
 #include "../util/SmbErrorMapper.hpp"
@@ -9,13 +7,11 @@
 #include "EntryStream.hpp"
 namespace react_native_smb {
 
-SmbTask::SmbTask(std::string id, std::unique_ptr<OperatorBase> seedOp, std::shared_ptr<SmbConnectionPool> pool)
-    : SmbTaskCore(std::move(id), seedOp->kind()), pool_(pool) {
-    if (seedOp->kind() == SmbOperatorKind::ListDirectory) {
+SmbTask::SmbTask(std::string id, std::unique_ptr<OperatorBase> op, std::shared_ptr<SmbConnectionPool> pool)
+    : SmbTaskCore(std::move(id), op->kind()), op_(std::move(op)), pool_(pool) {
+    if (op_->kind() == SmbOperatorKind::ListDirectory) {
         entries_ = std::make_shared<EntryStream>();
     }
-    ops_.push_back(std::move(seedOp));
-    opProgress_.resize(1);
 }
 
 SmbTask::~SmbTask() = default;
@@ -27,79 +23,62 @@ void SmbTask::cancel() {
     if (auto pool = pool_.lock()) pool->cancelRequestsForTask(getId());
 }
 
-void SmbTask::start() {
-    markRunning();
-    auto fut = completionFuture();
-    {
-        std::lock_guard<std::mutex> lk(stateMutex_);
-        pending_ = 1;
-        launchOp(0);
+bool SmbTask::prepare() {
+    auto pool = pool_.lock();
+    if (!pool) {
+        settle(SmbTaskStatus::Error, "SMB connection pool is unavailable", static_cast<int>(SmbErrorCode::NotConnected));
+        return false;
     }
-    fut.wait();
+    op_->attach(this, pool.get(), cancel_);
+    try {
+        op_->prepare();
+        return true;
+    } catch (...) {
+        settleFromCurrentException();
+    }
+    maybeSettle();
+    return false;
 }
 
-void SmbTask::launchOp(size_t opIndex) {
-    auto self = shared_from_this();
-    std::thread([self, opIndex] {
-        if (self->cancel_.cancelled()) {
-            self->onOpFinished();
-            return;
-        }
-        OperatorBase* op = nullptr;
-        {
-            std::lock_guard<std::mutex> lk(self->stateMutex_);
-            if (opIndex < self->ops_.size()) op = self->ops_[opIndex].get();
-        }
-        if (!op) {
-            self->onOpFinished();
-            return;
-        }
-        auto pool = self->pool_.lock();
-        if (!pool) {
-            if (!self->cancel_.cancelled()) {
-                self->settle(SmbTaskStatus::Error, "SMB connection pool is unavailable", static_cast<int>(SmbErrorCode::NotConnected));
-            }
-            self->onOpFinished();
-            return;
-        }
+std::optional<AcquireMode> SmbTask::acquireMode() const { return op_->acquireMode(); }
+
+void SmbTask::run(std::optional<SlotReservation> reservation) {
+    if (!cancel_.cancelled()) {
         try {
-            op->start(self.get(), pool.get(), self->cancel_, opIndex);
-        } catch (const SmbException& e) {
-            if (e.code() == SmbErrorCode::Cancelled) {
-                self->SmbTaskCore::cancel();
-            } else {
-                self->settle(SmbTaskStatus::Error, e.what(), e.codeInt());
-            }
-        } catch (const std::exception& e) {
-            const int code = SmbErrorMapper::fromErrnoOrMessage(0, e.what());
-            self->settle(SmbTaskStatus::Error, e.what(), code);
+            std::optional<PoolContextHandle> context;
+            if (reservation) context = reservation->activate();
+            markRunning();
+            op_->start(context ? &*context : nullptr);
         } catch (...) {
-            self->settle(SmbTaskStatus::Error, "unknown error", static_cast<int>(SmbErrorCode::Unknown));
+            settleFromCurrentException();
         }
-        self->onOpFinished();
-    }).detach();
+    }
+    maybeSettle();
 }
 
-size_t SmbTask::appendOps(std::vector<std::unique_ptr<OperatorBase>>& more) {
-    const size_t first = ops_.size();
-    for (auto& op : more) {
-        ops_.push_back(std::move(op));
+void SmbTask::reject(int code, const std::string& message) {
+    if (code == static_cast<int>(SmbErrorCode::Cancelled)) {
+        SmbTaskCore::cancel();
+    } else {
+        settle(SmbTaskStatus::Error, message, code);
     }
-    opProgress_.resize(ops_.size());
-    return first;
+    maybeSettle();
 }
 
-size_t SmbTask::spawn(std::vector<std::unique_ptr<OperatorBase>> moreOps) {
-    if (moreOps.empty()) return ops_.size();
-    const size_t count = moreOps.size();
-    size_t first;
-    {
-        std::lock_guard<std::mutex> lk(stateMutex_);
-        first = appendOps(moreOps);
-        pending_ += count;
-        for (size_t i = 0; i < count; ++i) launchOp(first + i);
+void SmbTask::settleFromCurrentException() {
+    try {
+        throw;
+    } catch (const SmbException& e) {
+        if (e.code() == SmbErrorCode::Cancelled) {
+            SmbTaskCore::cancel();
+        } else {
+            settle(SmbTaskStatus::Error, e.what(), e.codeInt());
+        }
+    } catch (const std::exception& e) {
+        settle(SmbTaskStatus::Error, e.what(), SmbErrorMapper::fromErrnoOrMessage(0, e.what()));
+    } catch (...) {
+        settle(SmbTaskStatus::Error, "unknown error", static_cast<int>(SmbErrorCode::Unknown));
     }
-    return first;
 }
 
 }  // namespace react_native_smb

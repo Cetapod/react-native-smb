@@ -4,11 +4,12 @@
 
 namespace react_native_smb {
 
+void CopyItemOperator::prepare() { setSourceDestination(fromPath_, toPath_); }
+
 void CopyItemOperator::run() {
-    setSourceDestination(fromPath_, toPath_);
-    MetadataContextLease lease = makeMetadataLease();
-    copyTreeImpl(pool(), kind(), fromPath_, toPath_, recursive_, cancelToken(),
-                 [this](double done, double total) { emitProgress(done, total); }, [this](int64_t n) { addExpectedBytes(n); }, owningTaskId(), &lease);
+    auto& handle = context();
+    copyTreeImpl(handle, fromPath_, toPath_, recursive_, cancelToken(),
+                 [this](double done, double total) { emitProgress(done, total); }, [this](int64_t n) { addExpectedBytes(n); });
     if (isCancelled()) {
         emitStatus(SmbTaskStatus::Cancelled);
         return;

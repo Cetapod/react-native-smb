@@ -82,49 +82,45 @@ class TreeDeleter {
 };
 }  // namespace
 
+void DeleteItemOperator::prepare() {
+    norm_ = path_util::normalized(path_);
+    if (norm_.empty()) SmbException::raise(SmbErrorCode::InvalidArgument, "Delete Failed: refusing to delete the share root");
+    setSourceDestination(norm_, "");
+}
+
 void DeleteItemOperator::run() {
     const CancellationToken token = cancelToken();
-    const std::string norm = path_util::normalized(path_);
-    if (norm.empty()) SmbException::raise(SmbErrorCode::InvalidArgument, "Delete Failed: refusing to delete the share root");
-    setSourceDestination(norm, "");
-
+    auto& handle = context();
     bool isDirectory = false;
-    {
-        auto handle = requestContext(AcquireMode::Metadata);
-        handle.submitSync([&](smb2_context* ctx) {
-            struct smb2_stat_64 st;
-            const int result = smb2_stat(ctx, norm.c_str(), &st);
-            if (result < 0) {
-                SmbException::raiseFromSmb(ctx, result, "Delete Failed: Could not stat '" + path_ + "'. Error: " + smb2_get_error(ctx));
-            }
-            isDirectory = (st.smb2_type & SMB2_TYPE_DIRECTORY) != 0;
-        });
-    }
+    handle.submitSync([&](smb2_context* ctx) {
+        struct smb2_stat_64 st;
+        const int result = smb2_stat(ctx, norm_.c_str(), &st);
+        if (result < 0) {
+            SmbException::raiseFromSmb(ctx, result, "Delete Failed: Could not stat '" + path_ + "'. Error: " + smb2_get_error(ctx));
+        }
+        isDirectory = (st.smb2_type & SMB2_TYPE_DIRECTORY) != 0;
+    });
 
     if (!isDirectory) {
-        auto handle = requestContext(AcquireMode::Metadata);
         handle.submitSync([&](smb2_context* ctx) {
-            const int r = smb2_unlink(ctx, norm.c_str());
+            const int r = smb2_unlink(ctx, norm_.c_str());
             if (r < 0) SmbException::raiseFromSmb(ctx, r, "Failed to delete file '" + path_ + "': " + smb2_get_error(ctx));
         });
         emitStatus(SmbTaskStatus::Success);
         return;
     }
 
-    {
-        listing::DirectoryListOptions options;
-        options.maxDepth = -1;
-        options.countChildren = false;
-        auto handle = requestContext(AcquireMode::Metadata);
-        handle.submitSync([&](smb2_context* ctx) {
-            const std::vector<SmbFileInfo> tree = listing::listOnCtx(ctx, handle.manager(), path_, options, token);
-            if (isCancelled()) return;
-            PipelinedOps ops(ctx, handle.manager(), token, kMaxDeletesInFlight, "Delete Failed");
-            TreeDeleter deleter(ops);
-            deleter.deleteFolder(path_, tree);
-            ops.run();
-        });
-    }
+    listing::DirectoryListOptions options;
+    options.maxDepth = -1;
+    options.countChildren = false;
+    handle.submitSync([&](smb2_context* ctx) {
+        const std::vector<SmbFileInfo> tree = listing::listOnCtx(ctx, handle.manager(), path_, options, token);
+        if (isCancelled()) return;
+        PipelinedOps ops(ctx, handle.manager(), token, kMaxDeletesInFlight, "Delete Failed");
+        TreeDeleter deleter(ops);
+        deleter.deleteFolder(path_, tree);
+        ops.run();
+    });
     if (isCancelled()) {
         emitStatus(SmbTaskStatus::Cancelled);
         return;

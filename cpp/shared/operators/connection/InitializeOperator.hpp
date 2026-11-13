@@ -12,6 +12,7 @@ class InitializeOperator : public OperatorBase {
     InitializeOperator(std::string url, SmbCredentials credentials) : url_(std::move(url)), credentials_(std::move(credentials)) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::Initialize; }
+    std::optional<AcquireMode> acquireMode() const override { return std::nullopt; }
     void run() override;
 
    private:
