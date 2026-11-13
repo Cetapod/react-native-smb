@@ -85,7 +85,7 @@ function DownloadBar({ task }) {
 | Field | Description |
 | ----- | ----------- |
 | `progress` | `0–1` (determinate for transfers) |
-| `status` | `TaskStatus` enum |
+| `status` | `TaskStatus` enum; `Pending` while queued for a connection slot |
 | `bytesDone` / `totalBytes` | Raw byte counts |
 | `bytesPerSecond` / `etaSeconds` | Throughput estimate |
 | `determinate` | `true` for download/upload/copy |
