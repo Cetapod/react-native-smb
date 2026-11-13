@@ -82,17 +82,19 @@ class TreeDeleter {
 };
 }  // namespace
 
+void DeleteItemOperator::prepare() {
+    norm_ = path_util::normalized(path_);
+    if (norm_.empty()) SmbException::raise(SmbErrorCode::InvalidArgument, "Delete Failed: refusing to delete the share root");
+    setSourceDestination(norm_, "");
+}
+
 void DeleteItemOperator::run() {
     const CancellationToken token = cancelToken();
-    const std::string norm = path_util::normalized(path_);
-    if (norm.empty()) SmbException::raise(SmbErrorCode::InvalidArgument, "Delete Failed: refusing to delete the share root");
-    setSourceDestination(norm, "");
-
-    auto handle = requestContext(AcquireMode::Metadata);
+    auto& handle = context();
     bool isDirectory = false;
     handle.submitSync([&](smb2_context* ctx) {
         struct smb2_stat_64 st;
-        const int result = smb2_stat(ctx, norm.c_str(), &st);
+        const int result = smb2_stat(ctx, norm_.c_str(), &st);
         if (result < 0) {
             SmbException::raiseFromSmb(ctx, result, "Delete Failed: Could not stat '" + path_ + "'. Error: " + smb2_get_error(ctx));
         }
@@ -101,7 +103,7 @@ void DeleteItemOperator::run() {
 
     if (!isDirectory) {
         handle.submitSync([&](smb2_context* ctx) {
-            const int r = smb2_unlink(ctx, norm.c_str());
+            const int r = smb2_unlink(ctx, norm_.c_str());
             if (r < 0) SmbException::raiseFromSmb(ctx, r, "Failed to delete file '" + path_ + "': " + smb2_get_error(ctx));
         });
         emitStatus(SmbTaskStatus::Success);

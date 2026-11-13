@@ -14,6 +14,8 @@ class CopyItemOperator : public OperatorBase {
     CopyItemOperator(std::string fromPath, std::string toPath, bool recursive = true) : fromPath_(std::move(fromPath)), toPath_(std::move(toPath)), recursive_(recursive) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::CopyItem; }
+    std::optional<AcquireMode> acquireMode() const override { return AcquireMode::Metadata; }
+    void prepare() override;
     void run() override;
 
    private:

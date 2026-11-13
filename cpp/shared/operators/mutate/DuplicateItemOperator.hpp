@@ -14,10 +14,13 @@ class DuplicateItemOperator : public Operator<std::string> {
     explicit DuplicateItemOperator(std::string path) : path_(std::move(path)) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::DuplicateItem; }
+    std::optional<AcquireMode> acquireMode() const override { return AcquireMode::Metadata; }
+    void prepare() override;
     void run() override;
 
    private:
     std::string path_;
+    std::string sourcePath_;
 };
 
 }  // namespace react_native_smb

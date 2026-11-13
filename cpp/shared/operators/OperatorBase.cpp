@@ -2,22 +2,25 @@
 
 #include "../connection/SmbConnectionPool.hpp"
 #include "../core/SmbTask.hpp"
+#include "../util/SmbException.hpp"
 
 namespace react_native_smb {
 
-void OperatorBase::start(SmbTask* task, SmbConnectionPool* pool, const CancellationToken& cancel) {
-    setContext(OperatorContext{task, pool, cancel});
-    if (cancel.cancelled()) return;
+void OperatorBase::attach(SmbTask* task, SmbConnectionPool* pool, const CancellationToken& cancel) {
+    ctx_ = OperatorContext{task, pool, cancel};
+}
+
+void OperatorBase::start(PoolContextHandle* context) {
+    ctx_.context = context;
+    if (isCancelled()) return;
     run();
 }
 
 std::string OperatorBase::owningTaskId() const { return ctx_.task ? ctx_.task->getId() : std::string(); }
 
-PoolContextHandle OperatorBase::requestContext(AcquireMode mode) {
-    if (ctx_.task) ctx_.task->markPending();
-    PoolContextHandle handle = pool().requestContext(mode, kind(), owningTaskId());
-    if (ctx_.task && !isCancelled()) ctx_.task->markRunning();
-    return handle;
+PoolContextHandle& OperatorBase::context() const {
+    if (!ctx_.context) SmbException::raise(SmbErrorCode::NotConnected, "operator has no pool context");
+    return *ctx_.context;
 }
 
 void OperatorBase::emitStatus(SmbTaskStatus s, const std::string& error, int code) {

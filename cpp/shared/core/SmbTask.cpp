@@ -1,5 +1,7 @@
 #include "SmbTask.hpp"
 
+#include <optional>
+
 #include "../connection/SmbConnectionPool.hpp"
 #include "../operators/OperatorBase.hpp"
 #include "../util/SmbErrorMapper.hpp"
@@ -32,7 +34,15 @@ void SmbTask::run() {
         }
     } else if (!cancel_.cancelled()) {
         try {
-            op_->start(this, pool.get(), cancel_);
+            op_->attach(this, pool.get(), cancel_);
+            op_->prepare();
+            std::optional<PoolContextHandle> context;
+            if (const auto mode = op_->acquireMode()) {
+                markPending();
+                context = pool->requestContext(*mode, getKind(), getId());
+                markRunning();
+            }
+            op_->start(context ? &*context : nullptr);
         } catch (const SmbException& e) {
             if (e.code() == SmbErrorCode::Cancelled) {
                 SmbTaskCore::cancel();

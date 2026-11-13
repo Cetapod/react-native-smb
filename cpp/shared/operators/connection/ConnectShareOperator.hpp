@@ -12,6 +12,7 @@ class ConnectShareOperator : public Operator<SmbConnectionInfo> {
     explicit ConnectShareOperator(std::string share) : share_(std::move(share)) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::ConnectShare; }
+    std::optional<AcquireMode> acquireMode() const override { return std::nullopt; }
     void run() override;
 
    private:

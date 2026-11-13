@@ -37,7 +37,7 @@ void onStat(smb2_context* smb2, int status, void* /*commandData*/, void* private
 void GetPathInfoOperator::run() {
     const std::string norm = path_util::normalized(path_);
     const CancellationToken token = cancelToken();
-    auto handle = requestContext(AcquireMode::Interactive);
+    auto& handle = context();
 
     SmbFileInfo info = handle.submitSync([&](smb2_context* ctx) {
         StatQuery stat;

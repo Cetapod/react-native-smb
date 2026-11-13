@@ -12,6 +12,7 @@ class ListSharesOperator : public Operator<std::vector<SmbShare>> {
     ListSharesOperator() = default;
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::ListShares; }
+    std::optional<AcquireMode> acquireMode() const override { return AcquireMode::Interactive; }
     void run() override;
 };
 

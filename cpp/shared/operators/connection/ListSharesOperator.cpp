@@ -5,7 +5,7 @@
 namespace react_native_smb {
 
 void ListSharesOperator::run() {
-    auto handle = requestContext(AcquireMode::Interactive);
+    auto& handle = context();
     result_ = handle.manager().listShares(owningTaskId());
     publishThisResult();
     emitStatus(SmbTaskStatus::Success);

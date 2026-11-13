@@ -12,7 +12,7 @@ namespace react_native_smb {
 void CreateDirectoryOperator::run() {
 
     const std::string norm = path_util::normalized(path_);
-    auto handle = requestContext(AcquireMode::Interactive);
+    auto& handle = context();
 
     handle.submitSync([&](smb2_context* ctx) {
         const int r = smb2_mkdir(ctx, norm.c_str());

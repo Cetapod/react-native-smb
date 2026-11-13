@@ -16,6 +16,7 @@ class ListDirectoryOperator : public OperatorBase {
         : path_(std::move(path)), maxDepth_(maxDepth), includeSecurityDescriptor_(includeSecurityDescriptor), batchSize_(batchSize) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::ListDirectory; }
+    std::optional<AcquireMode> acquireMode() const override { return maxDepth_ == 0 ? AcquireMode::Interactive : AcquireMode::Metadata; }
     void run() override;
 
    private:

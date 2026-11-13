@@ -6,19 +6,19 @@
 
 namespace react_native_smb {
 
+void DownloadFileOperator::prepare() {
+    remote_ = path_util::normalized(remotePath_);
+    local_ = path_util::convertUriToPath(localPath_);
+    setSourceDestination(remote_, local_);
+}
+
 void DownloadFileOperator::run() {
-
-    const std::string remote = path_util::normalized(remotePath_);
-    const std::string local = path_util::convertUriToPath(localPath_);
-
-    setSourceDestination(remote, local);
-
-    auto handle = requestContext(AcquireMode::Metadata);
+    auto& handle = context();
 
     const CancellationToken token = cancelToken();
     handle.submitSync([&](smb2_context* ctx) {
         smbReadFileAsync(
-            ctx, handle.manager(), remote, local, owningTaskId(), [this](double done, double total) { emitProgress(done, total); }, token);
+            ctx, handle.manager(), remote_, local_, owningTaskId(), [this](double done, double total) { emitProgress(done, total); }, token);
     });
 
     emitStatus(SmbTaskStatus::Success);

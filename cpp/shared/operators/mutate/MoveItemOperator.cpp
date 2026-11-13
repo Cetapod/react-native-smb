@@ -9,21 +9,21 @@
 
 namespace react_native_smb {
 
-void MoveItemOperator::run() {
-
-    const std::string from = path_util::normalized(fromPath_);
-    const std::string to = path_util::normalized(toPath_);
-    if (from.empty()) SmbException::raise(SmbErrorCode::InvalidArgument, "Move Failed: refusing to move the share root");
-    if (path_util::isDescendant(from, to)) {
+void MoveItemOperator::prepare() {
+    from_ = path_util::normalized(fromPath_);
+    to_ = path_util::normalized(toPath_);
+    if (from_.empty()) SmbException::raise(SmbErrorCode::InvalidArgument, "Move Failed: refusing to move the share root");
+    if (path_util::isDescendant(from_, to_)) {
         SmbException::raise(SmbErrorCode::InvalidArgument, "Move Failed: destination cannot be inside the source directory");
     }
+    setSourceDestination(from_, to_);
+}
 
-    setSourceDestination(from, to);
-
-    auto handle = requestContext(AcquireMode::Interactive);
+void MoveItemOperator::run() {
+    auto& handle = context();
 
     handle.submitSync([&](smb2_context* ctx) {
-        const int r = smb2_rename(ctx, from.c_str(), to.c_str());
+        const int r = smb2_rename(ctx, from_.c_str(), to_.c_str());
         if (r < 0) {
             SmbException::raiseFromSmb(ctx, r, "Move Failed: Could not move '" + fromPath_ + "' to '" + toPath_ + "'. Error: " + smb2_get_error(ctx));
         }

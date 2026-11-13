@@ -12,19 +12,17 @@
 
 namespace react_native_smb {
 
+void DuplicateItemOperator::prepare() {
+    sourcePath_ = path_util::normalized(path_);
+    setSourceDestination(sourcePath_, sourcePath_);
+}
+
 void DuplicateItemOperator::run() {
     const CancellationToken token = cancelToken();
-
-    const std::string sourcePath = path_util::normalized(path_);
+    const std::string& sourcePath = sourcePath_;
     const std::string parentPath = path_util::parentOf(sourcePath);
     const std::string fileName = path_util::extractFileName(sourcePath);
-    setSourceDestination(sourcePath, sourcePath);
-
-    auto handle = requestContext(AcquireMode::Metadata);
-    if (isCancelled()) {
-        emitStatus(SmbTaskStatus::Cancelled);
-        return;
-    }
+    auto& handle = context();
 
     const CopyTreeSourceInfo source = inspectCopyTreeSource(handle, sourcePath, /*recursive=*/true, token);
     constexpr int kMaxRootClaimRetries = 64;

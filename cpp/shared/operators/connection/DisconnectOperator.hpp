@@ -9,6 +9,7 @@ class DisconnectOperator : public OperatorBase {
     DisconnectOperator() = default;
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::Disconnect; }
+    std::optional<AcquireMode> acquireMode() const override { return std::nullopt; }
     void run() override;
 };
 

@@ -4,9 +4,10 @@
 
 namespace react_native_smb {
 
+void CopyItemOperator::prepare() { setSourceDestination(fromPath_, toPath_); }
+
 void CopyItemOperator::run() {
-    setSourceDestination(fromPath_, toPath_);
-    auto handle = requestContext(AcquireMode::Metadata);
+    auto& handle = context();
     copyTreeImpl(handle, fromPath_, toPath_, recursive_, cancelToken(),
                  [this](double done, double total) { emitProgress(done, total); }, [this](int64_t n) { addExpectedBytes(n); });
     if (isCancelled()) {

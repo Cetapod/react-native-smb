@@ -12,6 +12,7 @@ class GetPathInfoOperator : public Operator<SmbFileInfo> {
     explicit GetPathInfoOperator(std::string path) : path_(std::move(path)) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::GetPathInfo; }
+    std::optional<AcquireMode> acquireMode() const override { return AcquireMode::Interactive; }
     void run() override;
 
    private:

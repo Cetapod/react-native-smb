@@ -13,6 +13,7 @@ class GetSecurityDescriptorOperator : public Operator<SmbSecurityDescriptor> {
     explicit GetSecurityDescriptorOperator(std::string path) : path_(std::move(path)) {}
 
     SmbOperatorKind kind() const override { return SmbOperatorKind::GetSecurityDescriptor; }
+    std::optional<AcquireMode> acquireMode() const override { return AcquireMode::Interactive; }
     void run() override;
 
    private:

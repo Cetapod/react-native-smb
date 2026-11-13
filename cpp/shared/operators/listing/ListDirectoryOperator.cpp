@@ -19,7 +19,7 @@ void ListDirectoryOperator::run() {
     options.includeSecurityDescriptor = includeSecurityDescriptor_;
     if (batchSize_ > 0) options.minBatch = static_cast<size_t>(batchSize_);
 
-    auto handle = requestContext(maxDepth_ == 0 ? AcquireMode::Interactive : AcquireMode::Metadata);
+    auto& handle = context();
     handle.submitSync([&](smb2_context* ctx) {
         listing::DirectoryLister lister(ctx, handle.manager(), path_, options, cancelToken(),
                                         [&stream](std::vector<SmbFileInfo>&& batch) { stream->append(std::move(batch)); });
