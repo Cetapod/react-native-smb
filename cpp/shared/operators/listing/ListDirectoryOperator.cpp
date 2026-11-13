@@ -1,12 +1,12 @@
 #include "ListDirectoryOperator.hpp"
 
-#include <any>
 #include <memory>
 #include <vector>
 
-#include "../../ReactNativeSmb.hpp"  // SmbFileInfo + JSIConverter
 #include "../../connection/SmbConnectionPool.hpp"
 #include "../../core/EntryStream.hpp"
+#include "../../core/SmbModels.hpp"
+#include "../../core/SmbTaskResult.hpp"
 #include "../../io/listing/DirectoryLister.hpp"
 
 namespace react_native_smb {
@@ -27,12 +27,8 @@ void ListDirectoryOperator::run() {
     });
     if (isCancelled()) return;
 
-    // The stream already holds every entry; convert from it instead of keeping a copy.
-    publishResult(std::any(), [stream](jsi::Runtime& rt, const std::any&) -> jsi::Value {
-        return stream->read([&rt](const std::vector<SmbFileInfo>& entries) {
-            return margelo::nitro::JSIConverter<std::vector<SmbFileInfo>>::toJSI(rt, entries);
-        });
-    });
+    // Entries live in the stream; bridge reads them on getResultValue.
+    publishResult(ListingResult{});
     emitStatus(SmbTaskStatus::Success);
 }
 

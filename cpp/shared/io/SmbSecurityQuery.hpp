@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 
-#include "../ReactNativeSmb.hpp"
+#include "../core/SmbModels.hpp"
 #include "../util/SmbErrorMapper.hpp"
 
 struct smb2_context;

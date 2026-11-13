@@ -9,7 +9,7 @@
 namespace react_native_smb {
 
 // Immutable snapshot a task broadcasts to its subscribers. Pure data (DTO).
-// Projected to/from a Nitro string map by TaskSnapshotCodec.
+// Bridge maps this to Nitrogen SmbTaskState via BridgeMapping::toBridge.
 struct SmbTaskState {
     std::string taskId;
     SmbOperatorKind kind{SmbOperatorKind::Initialize};

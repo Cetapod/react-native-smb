@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "../../ReactNativeSmb.hpp"  // SmbCredentials
+#include "../../core/SmbModels.hpp"
 #include "../OperatorBase.hpp"
 
 namespace react_native_smb {

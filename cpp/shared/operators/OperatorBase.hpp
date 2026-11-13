@@ -1,13 +1,9 @@
 #pragma once
 
-#include <any>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include <jsi/jsi.h>
 
 #include "../connection/MetadataContextLease.hpp"
 #include "../connection/PoolContextHandle.hpp"
@@ -15,10 +11,9 @@
 #include "../core/CancellationToken.hpp"
 #include "../core/OperatorContext.hpp"
 #include "../core/SmbEnums.hpp"
+#include "../core/SmbTaskResult.hpp"
 
 namespace react_native_smb {
-
-namespace jsi = facebook::jsi;
 
 class SmbConnectionPool;
 class SmbTask;
@@ -50,7 +45,7 @@ class OperatorBase {
     size_t spawn(std::vector<std::unique_ptr<OperatorBase>> moreOps);
     void addExpectedBytes(int64_t bytes);
     void setSourceDestination(const std::string& source, const std::string& destination);
-    void publishResult(std::any value, std::function<jsi::Value(jsi::Runtime&, const std::any&)> converter);
+    void publishResult(SmbTaskResult value);
     // Owning task's incremental listing stream (null when detached from a task).
     std::shared_ptr<EntryStream> entryStream() const;
 

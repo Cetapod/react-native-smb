@@ -7,16 +7,15 @@ import {
   TaskStatus,
   type NativeSmbListTask,
   type SmbFileInfo,
+  type SmbTaskState,
 } from '../src/types';
+import { makeTaskSnapshot } from './helpers/taskSnapshot';
 
-function snapshot(status: TaskStatus, overrides: Record<string, string> = {}): Record<string, string> {
-  return {
-    exists: '1',
-    taskId: 'task-1',
-    kind: String(SmbOperatorKind.ListDirectory),
-    status: String(status),
+function snapshot(status: TaskStatus, overrides: Partial<SmbTaskState> = {}): SmbTaskState {
+  return makeTaskSnapshot(status, {
+    kind: SmbOperatorKind.ListDirectory,
     ...overrides,
-  };
+  });
 }
 
 function entry(name: string): SmbFileInfo {
@@ -42,8 +41,8 @@ type EntrySubscriber = {
 
 /** Mirrors native EntryStream notify-and-drain delivery. */
 class FakeNativeListTask implements NativeSmbListTask {
-  current: Record<string, string>;
-  readonly listeners = new Map<string, (raw: Record<string, string>) => void>();
+  current: SmbTaskState;
+  readonly listeners = new Map<string, (snap: SmbTaskState) => void>();
   readonly entrySubscribers = new Map<string, EntrySubscriber>();
   readonly unsubscribedEntries: string[] = [];
   readonly emitted: SmbFileInfo[] = [];
@@ -52,17 +51,17 @@ class FakeNativeListTask implements NativeSmbListTask {
   private nextId = 1;
   private deferSignals = false;
 
-  constructor(current: Record<string, string>) {
+  constructor(current: SmbTaskState) {
     this.current = current;
   }
 
   cancel(): void {}
 
-  get(): Record<string, string> {
+  get(): SmbTaskState {
     return this.current;
   }
 
-  subscribe(listener: (raw: Record<string, string>) => void): string {
+  subscribe(listener: (snap: SmbTaskState) => void): string {
     const id = `sub-${this.nextId++}`;
     this.listeners.set(id, listener);
     return id;
@@ -117,7 +116,7 @@ class FakeNativeListTask implements NativeSmbListTask {
     }
   }
 
-  emit(next: Record<string, string>): void {
+  emit(next: SmbTaskState): void {
     this.current = next;
     for (const listener of this.listeners.values()) listener(next);
   }
@@ -266,7 +265,7 @@ describe('SmbListTask completion', () => {
 
   it('wait() rejects with the task error', async () => {
     const native = new FakeNativeListTask(
-      snapshot(TaskStatus.Error, { errorCode: String(SmbError.AccessDenied), errorMessage: 'denied' }),
+      snapshot(TaskStatus.Error, { errorCode: SmbError.AccessDenied, errorMessage: 'denied' }),
     );
 
     await expect(new SmbListTask('task-1', native).wait()).rejects.toMatchObject({

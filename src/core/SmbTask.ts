@@ -1,4 +1,3 @@
-import { shapeTaskSnapshot } from '../bridge/decode';
 import { isTerminalStatus } from '../labels';
 import { TaskStatus, type NativeSmbTask, type SmbTaskState } from '../types';
 import { taskDone, taskResult } from './taskResult';
@@ -38,7 +37,7 @@ export class SmbTask<T = void> {
 
   /** One-shot snapshot without subscribing. */
   get(): SmbTaskState | null {
-    return shapeTaskSnapshot(this.native.get());
+    return this.native.get();
   }
 
   /** Latest known snapshot, reading native state once when needed. */
@@ -75,11 +74,6 @@ export class SmbTask<T = void> {
       listener?.(effective);
     };
 
-    const receive = (raw: Record<string, string>) => {
-      const snap = shapeTaskSnapshot(raw);
-      if (snap) receiveSnapshot(snap);
-    };
-
     const unsubscribe = () => {
       if (!active) return;
       active = false;
@@ -89,7 +83,7 @@ export class SmbTask<T = void> {
     };
 
     try {
-      subId = this.native.subscribe(receive);
+      subId = this.native.subscribe(receiveSnapshot);
       const initial = this.get();
       if (initial) receiveSnapshot(initial);
     } catch (error) {

@@ -16,12 +16,10 @@ Pod::Spec.new do |s|
   s.source       = { :git => "https://github.com/cetapod/react-native-smb.git", :tag => "v#{s.version}" }
 
   s.source_files = [
-    "cpp/shared/**/*.{cpp,hpp}",
-    "cpp/ios/**/*.{cpp,hpp,mm,m,h}"
+    "cpp/shared/**/*.{cpp,hpp}"
   ]
 
   s.header_mappings_dir = "cpp"
-  # React Native dependencies
   s.dependency "React"
   s.dependency "React-Core"
   s.dependency "NitroModules"
@@ -32,18 +30,23 @@ Pod::Spec.new do |s|
       header == "cpp/shared/io/SmbCopyTree.hpp" || header == "cpp/shared/io/SmbTreeOps.hpp"
   end
 
-  # Compiler settings
   s.requires_arc = true
+  # FOLLY_NO_CONFIG skips folly-config.h; under C++20 that turns FOLLY_HAS_COROUTINES
+  # on unless FOLLY_CFG_NO_COROUTINES is set. ReactNativeDependencies prebuilts omit
+  # folly/coro headers, so libraries that set FOLLY_NO_CONFIG must also disable coroutines.
   s.pod_target_xcconfig = {
-    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG FOLLY_MOBILE=1 FOLLY_USE_LIBCPP=1',
+    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG FOLLY_MOBILE=1 FOLLY_USE_LIBCPP=1 FOLLY_CFG_NO_COROUTINES=1',
     'HEADER_SEARCH_PATHS' => [
       '$(inherited)',
       '$(PODS_TARGET_SRCROOT)/cpp',
+      '$(PODS_TARGET_SRCROOT)/cpp/shared/bridge',
+      '$(PODS_TARGET_SRCROOT)/nitrogen/generated/shared/c++',
+      '$(PODS_TARGET_SRCROOT)/nitrogen/generated/ios',
       '$(PODS_TARGET_SRCROOT)/libsmb2/include',
       '$(PODS_ROOT)/NitroModules',
       '$(PODS_ROOT)/Headers/Private/NitroModules'
     ].join(' '),
-    'OTHER_CPLUSPLUSFLAGS' => '$(inherited) -std=c++20 -Wall'
+    'OTHER_CPLUSPLUSFLAGS' => '$(inherited) -std=c++20 -Wall -DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1 -DFOLLY_CFG_NO_COROUTINES=1'
   }
 
   s.user_target_xcconfig = {
@@ -55,7 +58,14 @@ Pod::Spec.new do |s|
     ].join(' ')
   }
 
-  # Modern XCFramework approach - automatically selects correct library
   s.vendored_frameworks = "ios/libs/libsmb2.xcframework"
 
+  # Nitrogen-generated sources + iOS autolinking registration
+  load 'nitrogen/generated/ios/ReactNativeSmb+autolinking.rb'
+  add_nitrogen_files(s)
+
+  # HybridObjects are C++-only. Nitrogen still emits Swift scaffolding that
+  # `import NitroModules`; building that Swift module against RN prebuilt Folly
+  # fails with missing folly/coro headers. Registration lives in the .mm +load.
+  s.exclude_files = 'nitrogen/generated/**/*.swift'
 end

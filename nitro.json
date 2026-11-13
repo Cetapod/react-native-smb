@@ -1,0 +1,20 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["smb"],
+  "ios": {
+    "iosModuleName": "ReactNativeSmb"
+  },
+  "android": {
+    "androidNamespace": ["smb"],
+    "androidCxxLibName": "ReactNativeSmb"
+  },
+  "autolinking": {
+    "ReactNativeSmb": {
+      "all": {
+        "language": "c++",
+        "implementationClassName": "HybridSMB"
+      }
+    }
+  },
+  "ignorePaths": ["**/node_modules", "lib", "example"]
+}

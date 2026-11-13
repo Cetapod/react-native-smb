@@ -1,42 +1,31 @@
 import { describe, expect, it } from 'vitest';
 
 import { SmbTask } from '../src/core/SmbTask';
-import { SmbError, SmbTaskError, SmbOperatorKind, TaskStatus, type NativeSmbTask } from '../src/types';
-
-function snapshot(status: TaskStatus, overrides: Record<string, string> = {}): Record<string, string> {
-  return {
-    exists: '1',
-    taskId: 'task-1',
-    kind: String(SmbOperatorKind.DownloadFile),
-    status: String(status),
-    determinate: 'true',
-    progress: status === TaskStatus.Success ? '1' : '0.5',
-    ...overrides,
-  };
-}
+import { SmbError, SmbTaskError, TaskStatus, type NativeSmbTask, type SmbTaskState } from '../src/types';
+import { makeTaskSnapshot } from './helpers/taskSnapshot';
 
 class FakeNativeTask implements NativeSmbTask {
-  current: Record<string, string>;
-  readonly listeners = new Map<string, (raw: Record<string, string>) => void>();
+  current: SmbTaskState;
+  readonly listeners = new Map<string, (snap: SmbTaskState) => void>();
   readonly unsubscribed: string[] = [];
   result: unknown = 'result';
   resultError?: Error;
   unsubscribeError?: Error;
-  onSubscribe?: (listener: (raw: Record<string, string>) => void) => void;
+  onSubscribe?: (listener: (snap: SmbTaskState) => void) => void;
   getError?: Error;
 
-  constructor(current: Record<string, string>) {
+  constructor(current: SmbTaskState) {
     this.current = current;
   }
 
   cancel(): void {}
 
-  get(): Record<string, string> {
+  get(): SmbTaskState {
     if (this.getError) throw this.getError;
     return this.current;
   }
 
-  subscribe(listener: (raw: Record<string, string>) => void): string {
+  subscribe(listener: (snap: SmbTaskState) => void): string {
     const id = `sub-${this.listeners.size + 1}`;
     this.listeners.set(id, listener);
     this.onSubscribe?.(listener);
@@ -54,7 +43,7 @@ class FakeNativeTask implements NativeSmbTask {
     return this.result;
   }
 
-  emit(next: Record<string, string>): void {
+  emit(next: SmbTaskState): void {
     this.current = next;
     for (const listener of this.listeners.values()) listener(next);
   }
@@ -62,13 +51,15 @@ class FakeNativeTask implements NativeSmbTask {
 
 describe('SmbTask.result', () => {
   it('settles terminal states read before subscribing without a listener', async () => {
-    const success = new FakeNativeTask(snapshot(TaskStatus.Success));
+    const success = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Success));
     await expect(new SmbTask<string>('task-1', success).result()).resolves.toBe('result');
     expect(success.listeners.size).toBe(0);
 
     for (const status of [TaskStatus.Error, TaskStatus.Cancelled]) {
       const native = new FakeNativeTask(
-        snapshot(status, { errorCode: String(status === TaskStatus.Cancelled ? SmbError.Cancelled : SmbError.Unknown) }),
+        makeTaskSnapshot(status, {
+          errorCode: status === TaskStatus.Cancelled ? SmbError.Cancelled : SmbError.Unknown,
+        }),
       );
       await expect(new SmbTask('task-1', native).result()).rejects.toMatchObject({
         code: status === TaskStatus.Cancelled ? SmbError.Cancelled : SmbError.Unknown,
@@ -78,9 +69,9 @@ describe('SmbTask.result', () => {
   });
 
   it('cleans up when subscription synchronously reports completion', async () => {
-    const native = new FakeNativeTask(snapshot(TaskStatus.Running));
+    const native = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Running));
     native.onSubscribe = (listener) => {
-      native.current = snapshot(TaskStatus.Success);
+      native.current = makeTaskSnapshot(TaskStatus.Success);
       listener(native.current);
     };
 
@@ -89,26 +80,26 @@ describe('SmbTask.result', () => {
   });
 
   it('settles only once when terminal events are repeated', async () => {
-    const native = new FakeNativeTask(snapshot(TaskStatus.Running));
+    const native = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Running));
     const task = new SmbTask<string>('task-1', native);
     const result = task.result();
 
-    native.emit(snapshot(TaskStatus.Success));
-    native.emit(snapshot(TaskStatus.Error));
+    native.emit(makeTaskSnapshot(TaskStatus.Success));
+    native.emit(makeTaskSnapshot(TaskStatus.Error));
 
     await expect(result).resolves.toBe('result');
     expect(native.unsubscribed).toEqual(['sub-1']);
   });
 
   it('delivers terminal state to every active subscriber', async () => {
-    const native = new FakeNativeTask(snapshot(TaskStatus.Running));
+    const native = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Running));
     const task = new SmbTask<string>('task-1', native);
     const observed: TaskStatus[] = [];
     const unsubscribe = task.subscribe((snap) => observed.push(snap.status));
     const result = task.result();
 
-    native.emit(snapshot(TaskStatus.Success));
-    native.emit(snapshot(TaskStatus.Error));
+    native.emit(makeTaskSnapshot(TaskStatus.Success));
+    native.emit(makeTaskSnapshot(TaskStatus.Error));
 
     await expect(result).resolves.toBe('result');
     expect(observed).toEqual([TaskStatus.Running, TaskStatus.Success]);
@@ -119,29 +110,29 @@ describe('SmbTask.result', () => {
   });
 
   it('rejects and cleans up when result conversion fails', async () => {
-    const native = new FakeNativeTask(snapshot(TaskStatus.Running));
+    const native = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Running));
     native.resultError = new Error('result conversion failed');
     const result = new SmbTask<string>('task-1', native).result();
 
-    native.emit(snapshot(TaskStatus.Success));
+    native.emit(makeTaskSnapshot(TaskStatus.Success));
 
     await expect(result).rejects.toThrow('result conversion failed');
     expect(native.unsubscribed).toEqual(['sub-1']);
   });
 
   it('settles even when native unsubscription fails', async () => {
-    const native = new FakeNativeTask(snapshot(TaskStatus.Running));
+    const native = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Running));
     native.unsubscribeError = new Error('unsubscribe failed');
     const result = new SmbTask<string>('task-1', native).result();
 
-    native.emit(snapshot(TaskStatus.Success));
+    native.emit(makeTaskSnapshot(TaskStatus.Success));
 
     await expect(result).resolves.toBe('result');
     expect(native.unsubscribed).toEqual(['sub-1']);
   });
 
   it('rejects when native subscription fails', async () => {
-    const native = new FakeNativeTask(snapshot(TaskStatus.Running));
+    const native = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Running));
     native.subscribe = () => {
       throw new Error('subscription failed');
     };
@@ -150,7 +141,7 @@ describe('SmbTask.result', () => {
   });
 
   it('unsubscribes when initial snapshot reading fails after subscription', () => {
-    const native = new FakeNativeTask(snapshot(TaskStatus.Running));
+    const native = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Running));
     native.getError = new Error('bridge failure');
     const task = new SmbTask('task-1', native);
 
@@ -159,13 +150,13 @@ describe('SmbTask.result', () => {
   });
 
   it('does not regress a cached terminal snapshot', () => {
-    const native = new FakeNativeTask(snapshot(TaskStatus.Running, { updatedAt: '1' }));
+    const native = new FakeNativeTask(makeTaskSnapshot(TaskStatus.Running, { updatedAt: 1 }));
     const task = new SmbTask('task-1', native);
     const observed: TaskStatus[] = [];
     task.subscribe((snap) => observed.push(snap.status));
 
-    native.emit(snapshot(TaskStatus.Success, { updatedAt: '3' }));
-    native.emit(snapshot(TaskStatus.Running, { updatedAt: '2' }));
+    native.emit(makeTaskSnapshot(TaskStatus.Success, { updatedAt: 3 }));
+    native.emit(makeTaskSnapshot(TaskStatus.Running, { updatedAt: 2 }));
 
     expect(task.getSnapshot()?.status).toBe(TaskStatus.Success);
     expect(observed.at(-1)).toBe(TaskStatus.Success);

@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "../../ReactNativeSmb.hpp"  // SmbShare
+#include "../../core/SmbModels.hpp"
 #include "../Operator.hpp"
 
 namespace react_native_smb {

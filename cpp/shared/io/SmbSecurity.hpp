@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ReactNativeSmb.hpp"
+#include "../core/SmbModels.hpp"
 #include <cstdint>
 #include <cstddef>
 #include <ctime>

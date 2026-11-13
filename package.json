@@ -5,11 +5,12 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
+    "specs": "nitrogen",
     "build": "tsc",
     "build:libsmb2": "chmod +x scripts/build-libsmb2.sh && scripts/build-libsmb2.sh",
     "build:xcframework": "chmod +x scripts/create-xcframework.sh && scripts/create-xcframework.sh",
     "build:ios": "npm run build:libsmb2 && npm run build:xcframework",
-    "build:full": "npm run build && npm run build:ios",
+    "build:full": "npm run specs && npm run build && npm run build:ios",
     "prepare": "npm run build",
     "prepack": "npm run clean && npm run build:full",
     "postpack": "npm run clean:build",
@@ -45,12 +46,18 @@
   "peerDependencies": {
     "react": ">=19.0.0",
     "react-native": ">=0.76.0",
-    "react-native-nitro-modules": ">=0.22.0 <1.0.0"
+    "react-native-nitro-modules": ">=0.37.2"
+  },
+  "peerDependenciesMeta": {
+    "react-native-nitro-modules": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/react": "^19.1.1",
+    "nitrogen": "0.37.2",
     "react-native": "0.83.4",
-    "react-native-nitro-modules": "~0.31.9",
+    "react-native-nitro-modules": "0.37.2",
     "typescript": "^5.0.0",
     "vitest": "^4.1.11"
   },
@@ -59,6 +66,8 @@
     "cpp/",
     "ios/",
     "docs/",
+    "nitrogen/",
+    "nitro.json",
     "ReactNativeSmb.podspec"
   ]
 }
