@@ -19,7 +19,6 @@ class PoolSlot {
 
     bool isInteractiveOnly() const { return index_ == 0; }
     bool isIdle() const { return state() == SlotState::Idle; }
-    bool accepts(AcquireMode mode) const;
 
     SmbConnectionManager* manager() { return conn_.get(); }
     const SmbConnectionManager* manager() const { return conn_.get(); }

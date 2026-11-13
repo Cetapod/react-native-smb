@@ -57,15 +57,10 @@ class HybridSMB : public HybridReactNativeSmbSpec {
     std::mutex poolListenersMutex_;
     std::atomic<size_t> poolListenerToken_{1};
 
-    enum class ExecutionLane { Shared, Lifecycle };
-
-    template <typename OpT>
-    std::shared_ptr<react_native_smb::SmbTask> startTask(const std::string& taskId, std::unique_ptr<OpT> seedOp,
-                                                         ExecutionLane lane = ExecutionLane::Shared);
-
-    template <typename OpT>
-    std::shared_ptr<HybridNativeSmbTaskSpec> createTask(const std::string& taskId, std::unique_ptr<OpT> seedOp,
-                                                        ExecutionLane lane = ExecutionLane::Shared);
+    // Work operators queue at the pool and run on their own thread once a slot
+    // is granted; lifecycle operators run on the lifecycle executor.
+    std::shared_ptr<react_native_smb::SmbTask> startTask(const std::string& taskId, std::unique_ptr<react_native_smb::OperatorBase> op);
+    std::shared_ptr<HybridNativeSmbTaskSpec> createTask(const std::string& taskId, std::unique_ptr<react_native_smb::OperatorBase> op);
 
    public:
     HybridSMB();

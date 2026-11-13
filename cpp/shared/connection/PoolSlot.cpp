@@ -4,11 +4,6 @@ namespace react_native_smb {
 
 PoolSlot::PoolSlot(size_t index) : index_(index), conn_(std::make_unique<SmbConnectionManager>()) {}
 
-bool PoolSlot::accepts(AcquireMode mode) const {
-    if (index_ == 0) return mode == AcquireMode::Interactive;
-    return true;
-}
-
 PoolSlotInfo PoolSlot::snapshot(size_t poolSize) const {
     PoolSlotInfo info;
     info.poolSize = poolSize;
